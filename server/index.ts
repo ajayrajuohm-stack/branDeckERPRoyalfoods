@@ -84,12 +84,33 @@ app.use((req, res, next) => {
     /* -------------------- SERVER -------------------- */
     const PORT = Number(process.env.PORT) || 5000;
 
+    // Health check endpoint for keep-alive
+    app.get('/api/health', (_req, res) => {
+      res.status(200).json({ status: 'ok' });
+    });
+
     httpServer.listen(PORT, "0.0.0.0", () => {
       log(`Server running at http://0.0.0.0:${PORT}`);
     });
+
+    // Keep-Alive Mechanism for Render Free Tier
+    const RENDER_EXTERNAL_URL = process.env.RENDER_EXTERNAL_URL;
+    if (RENDER_EXTERNAL_URL) {
+      log(`Starting Keep-Alive for ${RENDER_EXTERNAL_URL}`, "keep-alive");
+      const intervalMs = 14 * 60 * 1000; // 14 minutes (Render sleeps after 15)
+
+      setInterval(async () => {
+        try {
+          const { default: axios } = await import("axios");
+          await axios.get(`${RENDER_EXTERNAL_URL}/api/health`);
+          log("Keep-Alive ping success", "keep-alive");
+        } catch (e: any) {
+          log(`Keep-Alive ping failed: ${e.message}`, "keep-alive");
+        }
+      }, intervalMs);
+    }
   } catch (e) {
     console.error("Startup failed", e);
     process.exit(1);
   }
-  // Forced restart to pick up stock calculation fixes
 })();
