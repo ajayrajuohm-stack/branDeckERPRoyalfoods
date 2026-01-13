@@ -1007,6 +1007,7 @@ export default function Transactions() {
   const [purchaseSearch, setPurchaseSearch] = useState("");
   const [purchaseDateFilter, setPurchaseDateFilter] = useState("");
   const [purchaseSupplierFilter, setPurchaseSupplierFilter] = useState("all");
+  const [purchaseWarehouseFilter, setPurchaseWarehouseFilter] = useState("all");
   const [purchaseMonthFilter, setPurchaseMonthFilter] = useState("");
   const [vendorSummarySearch, setVendorSummarySearch] = useState("");
 
@@ -1033,9 +1034,12 @@ export default function Transactions() {
     const matchesSupplier = purchaseSupplierFilter === "all" ||
       String(p.supplierId) === purchaseSupplierFilter;
 
+    const matchesWarehouse = purchaseWarehouseFilter === "all" ||
+      String(p.warehouseId) === purchaseWarehouseFilter;
+
     const monthMatch = matchesMonth(p.purchaseDate, purchaseMonthFilter);
 
-    return matchesSearch && matchesDate && matchesSupplier && monthMatch;
+    return matchesSearch && matchesDate && matchesSupplier && matchesWarehouse && monthMatch;
   });
 
   const filteredVendorSummary = vendorSummary?.filter((v: any) => {
@@ -1051,10 +1055,11 @@ export default function Transactions() {
     setPurchaseSearch("");
     setPurchaseDateFilter("");
     setPurchaseSupplierFilter("all");
+    setPurchaseWarehouseFilter("all");
     setPurchaseMonthFilter("");
   };
 
-  const hasActiveFilters = purchaseSearch !== "" || purchaseDateFilter !== "" || purchaseSupplierFilter !== "all" || purchaseMonthFilter !== "";
+  const hasActiveFilters = purchaseSearch !== "" || purchaseDateFilter !== "" || purchaseSupplierFilter !== "all" || purchaseWarehouseFilter !== "all" || purchaseMonthFilter !== "";
 
   const handleDeletePurchase = (id: number) => {
     removePurchase.mutate(id);
@@ -1227,6 +1232,17 @@ export default function Transactions() {
                   <SelectItem value="all">All Suppliers</SelectItem>
                   {suppliers?.map((s: any) => (
                     <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={purchaseWarehouseFilter} onValueChange={setPurchaseWarehouseFilter}>
+                <SelectTrigger className="w-[160px]" data-testid="select-filter-warehouse">
+                  <SelectValue placeholder="All Warehouses" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Warehouses</SelectItem>
+                  {warehouses?.map((w: any) => (
+                    <SelectItem key={w.id} value={String(w.id)}>{w.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
