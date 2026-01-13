@@ -10,7 +10,7 @@ echo.
 echo 2. Committing changes...
 %GIT_PATH% commit -m "Fresh upload to ERP1"
 echo.
-set REPO_URL=https://github.com/omkaramajay-dev/Brandeck-ERP1.git
+set REPO_URL=https://github.com/ajayrajuohm-stack/branDeckERPRoyalfoods.git
 
 echo 3. Connecting to NEW Repo...
 echo Target Repo: %REPO_URL%
