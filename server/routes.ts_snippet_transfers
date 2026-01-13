@@ -1,0 +1,90 @@
+
+  /* =======================
+     STOCK TRANSFERS
+  ======================= */
+
+  app.get("/api/stock-transfers", async (_req, res) => {
+    try {
+      const rows = await db.query.stockTransfers.findMany({
+         with: {
+            item: true,
+            fromWarehouse: true,
+            toWarehouse: true,
+            uom: true
+         },
+         orderBy: (st, { desc }) => [desc(st.transferDate)]
+      });
+      res.json(rows);
+    } catch (err) {
+      handleDbError(err, res);
+    }
+  });
+
+  app.post("/api/stock-transfers", async (req, res) => {
+    try {
+      const { transferDate, itemId, fromWarehouseId, toWarehouseId, quantity, uomId, remarks } = req.body;
+
+      if (!transferDate || !itemId || !fromWarehouseId || !quantity || !uomId) {
+        return res.status(400).json({ message: "Missing required fields" });
+      }
+
+      // 1. Check Stock in From Warehouse
+      const stockData = await db
+        .select({
+          quantity: sql<number>`CAST(COALESCE(SUM(CAST(${stockLedger.quantity} AS DECIMAL)), 0) AS DECIMAL)`,
+        })
+        .from(stockLedger)
+        .where(
+          and(
+             eq(stockLedger.itemId, itemId),
+             eq(stockLedger.warehouseId, fromWarehouseId)
+          )
+        );
+
+      const currentStock = Number(stockData[0]?.quantity || 0);
+      const requestedQty = Number(quantity);
+
+      if (currentStock < requestedQty) {
+          return res.status(400).json({ message: `Insufficient stock in source warehouse! Available: ${currentStock.toFixed(2)}` });
+      }
+
+      // 2. Insert Transfer Record
+      const [transfer] = await db.insert(stockTransfers).values({
+          transferDate,
+          itemId,
+          fromWarehouseId,
+          toWarehouseId: toWarehouseId || null,
+          quantity: String(quantity),
+          uomId,
+          remarks
+      }).returning();
+
+      // 3. Deduct from Source
+      await db.insert(stockLedger).values({
+          itemId,
+          warehouseId: fromWarehouseId,
+          quantity: String(-Math.abs(requestedQty)),
+          referenceType: "TRANSFER_OUT",
+          referenceId: transfer.id
+      });
+
+      // 4. Add to Target (if exists)
+      if (toWarehouseId) {
+          await db.insert(stockLedger).values({
+              itemId,
+              warehouseId: toWarehouseId,
+              quantity: String(Math.abs(requestedQty)),
+              referenceType: "TRANSFER_IN",
+              referenceId: transfer.id
+          });
+      }
+
+      // 5. If it was an "Issue" (No Target) - It's consumed. Stock ledger entry is enough.
+      // But maybe we want remarks? Stock Ledger doesn't hold remarks.
+      // The `stockTransfers` table holds the remarks.
+
+      res.status(201).json(transfer);
+    } catch (err) {
+      handleDbError(err, res);
+    }
+  });

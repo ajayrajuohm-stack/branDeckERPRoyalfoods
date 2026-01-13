@@ -1,0 +1,1 @@
+{"date":"2026-01-08","openingStock":6246,"summary":{"purchases":{"count":0,"amount":0},"sales":{"count":1,"amount":264,"quantity":12},"production":{"count":1,"output":12}},"sales":[{"id":13,"customer":"Customer 1","amount":264,"items":"Biscuit (12)"}],"production":[{"id":21,"item":"Biscuit","quantity":12}],"totalFGStock":0,"closingStock":6120.04}

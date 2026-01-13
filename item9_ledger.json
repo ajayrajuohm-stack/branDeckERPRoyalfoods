@@ -1,0 +1,297 @@
+[
+  {
+    "type": "PRODUCTION",
+    "qty": "8",
+    "ref": 1
+  },
+  {
+    "type": "SALE",
+    "qty": "-5",
+    "ref": 2
+  },
+  {
+    "type": "SALE_REVERSAL",
+    "qty": "5",
+    "ref": 2
+  },
+  {
+    "type": "SALE",
+    "qty": "-5",
+    "ref": 3
+  },
+  {
+    "type": "SALE",
+    "qty": "-1",
+    "ref": 4
+  },
+  {
+    "type": "SALE_REVERSAL",
+    "qty": "1",
+    "ref": 4
+  },
+  {
+    "type": "SALE_REVERSAL",
+    "qty": "5",
+    "ref": 3
+  },
+  {
+    "type": "PRODUCTION_REVERSAL",
+    "qty": "-8",
+    "ref": 1
+  },
+  {
+    "type": "PRODUCTION",
+    "qty": "1",
+    "ref": 2
+  },
+  {
+    "type": "PRODUCTION_REVERSAL",
+    "qty": "-1",
+    "ref": 2
+  },
+  {
+    "type": "PRODUCTION",
+    "qty": "1",
+    "ref": 3
+  },
+  {
+    "type": "PRODUCTION",
+    "qty": "1",
+    "ref": 4
+  },
+  {
+    "type": "PRODUCTION_REVERSAL",
+    "qty": "-1",
+    "ref": 3
+  },
+  {
+    "type": "PRODUCTION_REVERSAL",
+    "qty": "-1",
+    "ref": 4
+  },
+  {
+    "type": "PRODUCTION",
+    "qty": "1",
+    "ref": 5
+  },
+  {
+    "type": "PRODUCTION_REVERSAL",
+    "qty": "-1",
+    "ref": 5
+  },
+  {
+    "type": "PRODUCTION",
+    "qty": "1",
+    "ref": 6
+  },
+  {
+    "type": "PRODUCTION_REVERSAL",
+    "qty": "-1",
+    "ref": 6
+  },
+  {
+    "type": "PRODUCTION",
+    "qty": "1",
+    "ref": 7
+  },
+  {
+    "type": "PRODUCTION_REVERSAL",
+    "qty": "-1",
+    "ref": 7
+  },
+  {
+    "type": "PRODUCTION",
+    "qty": "8",
+    "ref": 8
+  },
+  {
+    "type": "PRODUCTION",
+    "qty": "1",
+    "ref": 9
+  },
+  {
+    "type": "PRODUCTION",
+    "qty": "4",
+    "ref": 10
+  },
+  {
+    "type": "PRODUCTION_REVERSAL",
+    "qty": "-8",
+    "ref": 8
+  },
+  {
+    "type": "PRODUCTION_REVERSAL",
+    "qty": "-1",
+    "ref": 9
+  },
+  {
+    "type": "PRODUCTION_REVERSAL",
+    "qty": "-4",
+    "ref": 10
+  },
+  {
+    "type": "PRODUCTION",
+    "qty": "50",
+    "ref": 11
+  },
+  {
+    "type": "PRODUCTION",
+    "qty": "170",
+    "ref": 12
+  },
+  {
+    "type": "SALE",
+    "qty": "-100",
+    "ref": 5
+  },
+  {
+    "type": "SALE",
+    "qty": "-10",
+    "ref": 6
+  },
+  {
+    "type": "PRODUCTION_REVERSAL",
+    "qty": "-50",
+    "ref": 11
+  },
+  {
+    "type": "PRODUCTION_REVERSAL",
+    "qty": "-170",
+    "ref": 12
+  },
+  {
+    "type": "SALE_REVERSAL",
+    "qty": "100",
+    "ref": 5
+  },
+  {
+    "type": "SALE_REVERSAL",
+    "qty": "10",
+    "ref": 6
+  },
+  {
+    "type": "PRODUCTION",
+    "qty": "333",
+    "ref": 13
+  },
+  {
+    "type": "PRODUCTION_REVERSAL",
+    "qty": "-333",
+    "ref": 13
+  },
+  {
+    "type": "PRODUCTION",
+    "qty": "160",
+    "ref": 14
+  },
+  {
+    "type": "PRODUCTION_REVERSAL",
+    "qty": "-160",
+    "ref": 14
+  },
+  {
+    "type": "PRODUCTION",
+    "qty": "200",
+    "ref": 15
+  },
+  {
+    "type": "PRODUCTION",
+    "qty": "40",
+    "ref": 16
+  },
+  {
+    "type": "PRODUCTION",
+    "qty": "40",
+    "ref": 17
+  },
+  {
+    "type": "PRODUCTION_REVERSAL",
+    "qty": "-40",
+    "ref": 17
+  },
+  {
+    "type": "PRODUCTION_REVERSAL",
+    "qty": "-40",
+    "ref": 16
+  },
+  {
+    "type": "SALE",
+    "qty": "-100",
+    "ref": 7
+  },
+  {
+    "type": "SALE",
+    "qty": "-10",
+    "ref": 8
+  },
+  {
+    "type": "SALE",
+    "qty": "-10",
+    "ref": 9
+  },
+  {
+    "type": "SALE",
+    "qty": "-10",
+    "ref": 10
+  },
+  {
+    "type": "PRODUCTION_REVERSAL",
+    "qty": "-200",
+    "ref": 15
+  },
+  {
+    "type": "SALE_REVERSAL",
+    "qty": "100",
+    "ref": 7
+  },
+  {
+    "type": "SALE_REVERSAL",
+    "qty": "10",
+    "ref": 8
+  },
+  {
+    "type": "SALE_REVERSAL",
+    "qty": "10",
+    "ref": 9
+  },
+  {
+    "type": "SALE_REVERSAL",
+    "qty": "10",
+    "ref": 10
+  },
+  {
+    "type": "PRODUCTION",
+    "qty": "353",
+    "ref": 18
+  },
+  {
+    "type": "PRODUCTION_REVERSAL",
+    "qty": "-353",
+    "ref": 18
+  },
+  {
+    "type": "PRODUCTION",
+    "qty": "2",
+    "ref": 19
+  },
+  {
+    "type": "PRODUCTION_UPDATE_REVERSAL",
+    "qty": "-2",
+    "ref": 19
+  },
+  {
+    "type": "PRODUCTION",
+    "qty": "20",
+    "ref": 19
+  },
+  {
+    "type": "PRODUCTION_REVERSAL",
+    "qty": "-2",
+    "ref": 19
+  },
+  {
+    "type": "PRODUCTION_REVERSAL",
+    "qty": "-20",
+    "ref": 19
+  }
+]

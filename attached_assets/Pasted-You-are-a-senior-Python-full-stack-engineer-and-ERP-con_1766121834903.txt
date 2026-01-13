@@ -1,0 +1,269 @@
+You are a senior Python full-stack engineer and ERP consultant.
+
+Build a SIMPLE, CLEAN, EXCEL-DRIVEN ERP web application for SMALL SCALE INDUSTRIES.
+
+========================
+TECH STACK (MANDATORY)
+========================
+Backend: Python (FastAPI)
+Database: PostgreSQL
+ORM: SQLAlchemy (Declarative)
+Migrations: Alembic
+Frontend: React + TypeScript
+State/Data: TanStack React Query
+Styling: Tailwind CSS
+API: REST (NO GraphQL)
+Export: JSON + Excel (.xlsx using openpyxl)
+Hosting: Replit (FREE tier only)
+
+========================
+ARCHITECTURE
+========================
+Monorepo:
+
+/server
+  ├── main.py
+  ├── database.py
+  ├── models/
+  ├── schemas/
+  ├── services/
+  ├── routes/
+  ├── reports/
+  ├── exports/
+/client
+/shared (constants & enums)
+
+Clear separation:
+- Models → DB
+- Services → business logic
+- Routes → API
+- Reports → calculations
+- Exports → Excel & JSON backup
+
+========================
+CORE BUSINESS PRINCIPLE
+========================
+This ERP is a DIRECT CONVERSION of existing Excel workflows.
+All calculations must behave EXACTLY like Excel.
+
+NO over-engineering.
+NO hidden logic.
+Code must be readable & editable.
+
+========================
+1️⃣ MASTERS (ALL DROPDOWNS)
+========================
+
+Create CRUD APIs & UI screens for:
+
+- Units of Measure (UOM)
+- Warehouses
+- Categories
+- Items
+  - name
+  - category_id
+  - default_uom_id
+  - reorder_level
+  - is_active (SOFT DELETE ONLY)
+- Suppliers
+- Expense Heads
+- Owners (3 owners)
+  - name
+  - default_share_percentage
+- Payment Methods
+
+DELETE RULES:
+- ❌ Masters CANNOT be deleted if referenced in transactions
+- Return clear error message
+- ❌ Hard delete blocked if dependency exists
+- ✅ Items use SOFT DELETE (is_active = false)
+
+========================
+2️⃣ INVENTORY & STOCK LOGIC
+========================
+
+Stock must be maintained:
+- Item-wise
+- Warehouse-wise
+
+STOCK MOVEMENTS:
+- Opening Stock → ADD
+- Purchase → ADD
+- Daily Issue → SUBTRACT
+- Production → SUBTRACT raw materials, ADD finished goods
+
+Closing Stock =
+Opening
++ Purchases
++ Production Output
+- Issues
+- Production Consumption
+
+Stock must NEVER go negative.
+
+========================
+3️⃣ TRANSACTIONS (DELETE ALLOWED)
+========================
+
+All transactions CAN be deleted.
+Deleting a record must REVERSE its stock impact.
+
+--------------------------------
+A. OPENING STOCK
+--------------------------------
+- item_id
+- warehouse_id
+- quantity
+- uom_id
+
+--------------------------------
+B. PURCHASE
+--------------------------------
+- purchase_date
+- supplier_id
+- item_id
+- warehouse_id
+- quantity
+- rate
+- amount (auto = qty × rate)
+- expense_head_id (optional)
+- total_amount
+
+✔ Purchase MUST increase warehouse stock
+
+--------------------------------
+C. DAILY ISSUE
+--------------------------------
+- issue_date
+- item_id
+- warehouse_id
+- quantity
+- uom_id
+- remarks
+
+✔ Issue MUST decrease stock
+
+--------------------------------
+D. OWNER PAYMENTS
+--------------------------------
+- purchase_id
+- owner_id
+- owner_share_amount (auto via %)
+- amount_paid
+- balance_amount (auto)
+- payment_method_id
+- status (Paid / Partial / Pending)
+
+========================
+4️⃣ PRODUCTION MODULE (BOM)
+========================
+
+Create a PRODUCTION tab.
+
+Fixed BOM for BISCUIT:
+
+Inputs:
+- Maida → 40.000
+- Vanaspathi (Dalda) → 15.000
+- Sugar → 10.000
+- Milk Powder → 1.138
+- Salt → 0.800
+- AM → 0.400
+- Plastic → 1.600
+
+Output:
+- Biscuit (Finished Good)
+
+PRODUCTION FLOW:
+- Show available raw material stock
+- User enters production quantity
+- Auto-calculate required inputs
+- Validate stock availability
+- Deduct raw materials
+- Add finished goods stock
+
+LOW STOCK ALERT:
+- If stock < reorder_level
+- Show warning badge + toast
+
+========================
+5️⃣ REPORTS (EXCEL EXACT)
+========================
+
+Generate:
+
+- Daily Purchase Report
+- Monthly Purchase Report
+- Yearly Purchase Report
+- Daily Issue (Sales) Report
+- Monthly Issue Report
+- Yearly Issue Report
+- Warehouse-wise Stock Report
+- Production Consumption Report
+
+Calculations must MATCH Excel totals.
+
+========================
+6️⃣ BACKUP & EXPORT (MANDATORY)
+========================
+
+Add BACKUP tab.
+
+On click:
+Generate and download:
+
+- Masters.xlsx
+- Purchases.xlsx
+- Issues.xlsx
+- Production.xlsx
+- Stock_In_Hand.xlsx
+- Payments.xlsx
+- Full JSON backup
+
+One-click download.
+No cloud.
+No authentication.
+
+========================
+7️⃣ UI RULES
+========================
+
+- Simple dashboard
+- Sidebar navigation
+- One screen per module
+- Dropdowns everywhere
+- Delete confirmation modal
+- Toast notifications
+- Tables styled like Excel
+
+========================
+8️⃣ API & CODE RULES
+========================
+
+- REST APIs only
+- Business logic in Python services
+- Frontend only displays values
+- No magic abstractions
+- Easy to debug & extend
+- Clear naming
+
+========================
+9️⃣ DELIVERABLES
+========================
+
+Generate:
+1. SQLAlchemy models
+2. Stock calculation services
+3. Production BOM logic
+4. CRUD routes
+5. Reports routes
+6. Excel export utilities
+7. Frontend pages
+8. README with setup steps
+
+DO NOT:
+- Add authentication
+- Add paid services
+- Over-engineer
+
+Build this exactly like an Excel-based ERP converted into a Python web app.

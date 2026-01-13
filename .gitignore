@@ -1,0 +1,31 @@
+node_modules
+dist
+.DS_Store
+.env
+.env.*
+!.env.example
+
+# Build files
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS files
+Thumbs.db
+
+# Private files
+uploads/
+*.log
+server/public
+vite.config.ts.*
+*.tar.gz
