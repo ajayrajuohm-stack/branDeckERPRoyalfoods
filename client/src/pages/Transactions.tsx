@@ -381,8 +381,8 @@ function PurchaseForm({ onSuccess, initialData }: { onSuccess: () => void; initi
 }
 
 // --- Stock Transfer Form ---
-function StockTransferForm({ onSuccess }: { onSuccess: () => void }) {
-  const { create } = useStockTransfers();
+function StockTransferForm({ onSuccess, initialData }: { onSuccess: () => void; initialData?: any }) {
+  const { create, update } = useStockTransfers();
   const { data: items } = useItems().list;
   const { data: warehouses } = useWarehouses().list;
   const { data: uoms } = useUoms().list;
@@ -397,9 +397,19 @@ function StockTransferForm({ onSuccess }: { onSuccess: () => void }) {
     remarks: z.string().optional(),
   });
 
+  const isEditing = !!initialData;
+
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
-    defaultValues: {
+    defaultValues: initialData ? {
+      transferDate: new Date(initialData.transferDate),
+      itemId: initialData.itemId,
+      fromWarehouseId: initialData.fromWarehouseId,
+      toWarehouseId: initialData.toWarehouseId,
+      quantity: Number(initialData.quantity),
+      uomId: initialData.uomId,
+      remarks: initialData.remarks || "",
+    } : {
       transferDate: new Date(),
       remarks: "",
     }
@@ -412,12 +422,18 @@ function StockTransferForm({ onSuccess }: { onSuccess: () => void }) {
   }
 
   function onSubmit(values: z.infer<typeof formSchema>) {
-    create.mutate({
+    const payload = {
       ...values,
       transferDate: format(values.transferDate, "yyyy-MM-dd"),
       quantity: String(values.quantity),
       toWarehouseId: values.toWarehouseId ? Number(values.toWarehouseId) : null,
-    }, { onSuccess });
+    };
+
+    if (isEditing) {
+      update.mutate({ id: initialData.id, ...payload }, { onSuccess });
+    } else {
+      create.mutate(payload, { onSuccess });
+    }
   }
 
   return (
@@ -539,8 +555,11 @@ function StockTransferForm({ onSuccess }: { onSuccess: () => void }) {
           )}
         />
 
-        <Button type="submit" className="w-full" disabled={create.isPending}>
-          {create.isPending ? "Submitting..." : "Submit Transfer"}
+        <Button type="submit" className="w-full" disabled={isEditing ? update.isPending : create.isPending}>
+          {isEditing
+            ? (update.isPending ? "Updating..." : "Update Transfer")
+            : (create.isPending ? "Submitting..." : "Submit Transfer")
+          }
         </Button>
       </form>
     </Form>
@@ -983,6 +1002,7 @@ export default function Transactions() {
   const [payOpen, setPayOpen] = useState(false);
   const [editingPayment, setEditingPayment] = useState<any>(null);
   const [editingPurchase, setEditingPurchase] = useState<any>(null);
+  const [editingTransfer, setEditingTransfer] = useState<any>(null);
 
   const [purchaseSearch, setPurchaseSearch] = useState("");
   const [purchaseDateFilter, setPurchaseDateFilter] = useState("");
@@ -1049,6 +1069,11 @@ export default function Transactions() {
     if (confirm("Are you sure you want to delete this transfer?")) {
       removeTransfer.mutate(id);
     }
+  };
+
+  const handleEditTransfer = (transfer: any) => {
+    setEditingTransfer(transfer);
+    setIOpen(true);
   };
 
   const handleEditPayment = (payment: any) => {
@@ -1287,15 +1312,22 @@ export default function Transactions() {
               <Button variant="outline" size="sm" onClick={handleExportTransfers} disabled={!filteredTransfers?.length} data-testid="button-export-issues">
                 <Download className="w-4 h-4 mr-1" /> Export
               </Button>
-              <Dialog open={iOpen} onOpenChange={setIOpen}>
+              <Dialog open={iOpen} onOpenChange={(open) => {
+                setIOpen(open);
+                if (!open) setEditingTransfer(null);
+              }}>
                 <DialogTrigger asChild>
                   <Button size="sm" className="bg-primary hover:bg-primary/90" data-testid="button-new-issue">
                     <Plus className="w-4 h-4 mr-1" /> Transfer Stock
                   </Button>
                 </DialogTrigger>
                 <DialogContent className="max-h-[95vh] overflow-y-auto">
-                  <DialogHeader><DialogTitle>Transfer Stock</DialogTitle></DialogHeader>
-                  <StockTransferForm onSuccess={() => setIOpen(false)} />
+                  <DialogHeader><DialogTitle>{editingTransfer ? "Edit Stock Transfer" : "Transfer Stock"}</DialogTitle></DialogHeader>
+                  <StockTransferForm
+                    key={editingTransfer ? `edit-${editingTransfer.id}` : 'new'}
+                    onSuccess={() => { setIOpen(false); setEditingTransfer(null); }}
+                    initialData={editingTransfer}
+                  />
                 </DialogContent>
               </Dialog>
             </div>
@@ -1316,16 +1348,28 @@ export default function Transactions() {
               { header: "Remarks", accessorKey: "remarks", className: "text-muted-foreground italic" },
               {
                 header: "Actions",
-                className: "w-16 text-right",
+                className: "w-24 text-right",
                 cell: (item: any) => (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => handleDeleteTransfer(item.id)}
-                    data-testid={`button-delete-issue-${item.id}`}
-                  >
-                    <Trash2 className="w-4 h-4 text-destructive" />
-                  </Button>
+                  <div className="flex justify-end gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => handleEditTransfer(item)}
+                      data-testid={`button-edit-issue-${item.id}`}
+                    >
+                      <Edit className="w-4 h-4 text-blue-600" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => handleDeleteTransfer(item.id)}
+                      data-testid={`button-delete-issue-${item.id}`}
+                    >
+                      <Trash2 className="w-4 h-4 text-destructive" />
+                    </Button>
+                  </div>
                 )
               }
             ]}

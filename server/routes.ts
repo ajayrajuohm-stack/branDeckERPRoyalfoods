@@ -1615,6 +1615,126 @@ export async function registerRoutes(_server: any, app: Express) {
     }
   });
 
+  // DELETE Stock Transfer
+  app.delete("/api/stock-transfers/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const [transfer] = await db.select().from(stockTransfers).where(eq(stockTransfers.id, id));
+
+      if (!transfer) return res.status(404).json({ message: "Transfer not found" });
+
+      // Revert Stock
+      await db.insert(stockLedger).values({
+        itemId: transfer.itemId,
+        warehouseId: transfer.fromWarehouseId,
+        quantity: String(transfer.quantity),
+        referenceType: "TRANSFER_REV_OUT",
+        referenceId: transfer.id
+      });
+
+      if (transfer.toWarehouseId) {
+        await db.insert(stockLedger).values({
+          itemId: transfer.itemId,
+          warehouseId: transfer.toWarehouseId,
+          quantity: String(-Number(transfer.quantity)),
+          referenceType: "TRANSFER_REV_IN",
+          referenceId: transfer.id
+        });
+      }
+
+      await db.delete(stockTransfers).where(eq(stockTransfers.id, id));
+      res.json({ message: "Transfer deleted and stock reverted" });
+    } catch (err) {
+      handleDbError(err, res);
+    }
+  });
+
+  // UPDATE Stock Transfer
+  app.put("/api/stock-transfers/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { transferDate, itemId, fromWarehouseId, toWarehouseId, quantity, uomId, remarks } = req.body;
+
+      if (!transferDate || !itemId || !fromWarehouseId || !quantity || !uomId) {
+        return res.status(400).json({ message: "Missing required fields" });
+      }
+
+      const [oldTransfer] = await db.select().from(stockTransfers).where(eq(stockTransfers.id, id));
+      if (!oldTransfer) return res.status(404).json({ message: "Transfer not found" });
+
+      // 1. Check Availability (considering the revert of old transfer)
+      const stockData = await db
+        .select({
+          quantity: sql<number>`CAST(COALESCE(SUM(CAST(${stockLedger.quantity} AS DECIMAL)), 0) AS DECIMAL)`,
+        })
+        .from(stockLedger)
+        .where(
+          and(
+            eq(stockLedger.itemId, itemId),
+            eq(stockLedger.warehouseId, fromWarehouseId)
+          )
+        );
+
+      let currentStock = Number(stockData[0]?.quantity || 0);
+
+      // If we are modifying the same item/warehouse context, credit back the old amount for availability check
+      if (oldTransfer.itemId === itemId && oldTransfer.fromWarehouseId === fromWarehouseId) {
+        currentStock += Number(oldTransfer.quantity);
+      }
+
+      if (currentStock < Number(quantity)) {
+        return res.status(400).json({ message: `Insufficient stock! Available: ${currentStock.toFixed(2)}` });
+      }
+
+      // 2. Revert Old Stock
+      await db.insert(stockLedger).values({
+        itemId: oldTransfer.itemId,
+        warehouseId: oldTransfer.fromWarehouseId,
+        quantity: String(oldTransfer.quantity),
+        referenceType: "TRANSFER_REV_OUT",
+        referenceId: oldTransfer.id
+      });
+
+      if (oldTransfer.toWarehouseId) {
+        await db.insert(stockLedger).values({
+          itemId: oldTransfer.itemId,
+          warehouseId: oldTransfer.toWarehouseId,
+          quantity: String(-Number(oldTransfer.quantity)),
+          referenceType: "TRANSFER_REV_IN",
+          referenceId: oldTransfer.id
+        });
+      }
+
+      // 3. Apply New Stock
+      await db.insert(stockLedger).values({
+        itemId,
+        warehouseId: fromWarehouseId,
+        quantity: String(-Math.abs(Number(quantity))),
+        referenceType: "TRANSFER_OUT",
+        referenceId: id
+      });
+
+      if (toWarehouseId) {
+        await db.insert(stockLedger).values({
+          itemId,
+          warehouseId: toWarehouseId,
+          quantity: String(Math.abs(Number(quantity))),
+          referenceType: "TRANSFER_IN",
+          referenceId: id
+        });
+      }
+
+      // 4. Update Record
+      const [updated] = await db.update(stockTransfers).set({
+        transferDate, itemId, fromWarehouseId, toWarehouseId: toWarehouseId || null, quantity: String(quantity), uomId, remarks
+      }).where(eq(stockTransfers.id, id)).returning();
+
+      res.json(updated);
+    } catch (err) {
+      handleDbError(err, res);
+    }
+  });
+
   /* =======================
      STOCK REPORT
   ======================= */
