@@ -1,22 +1,20 @@
 @echo off
 set GIT_PATH="C:\Program Files\Git\cmd\git.exe"
 echo ==========================================
-echo Brandeck ERP - Cloud Upload Debugger
+echo Brandeck ERP - New Repo Upload (V1)
 echo ==========================================
-echo.
-echo Checking Git:
-if exist %GIT_PATH% (echo [OK] Git found) else (echo [ERROR] Git not found at default path)
 echo.
 echo 1. Adding files...
 %GIT_PATH% add .
 echo.
 echo 2. Committing changes...
-%GIT_PATH% commit -m "Final Cloud Ready Version"
+%GIT_PATH% commit -m "Fresh upload to ERP1"
 echo.
-echo 3. Setting Remote...
-%GIT_PATH% remote set-url origin https://github.com/omkaramajay-dev/Brandeck-ERP.git
+echo 3. Connecting to NEW Repo...
+%GIT_PATH% remote remove origin >nul 2>&1
+%GIT_PATH% remote add origin https://github.com/omkaramajay-dev/Brandeck-ERP1.git
 echo.
-echo 4. Pushing to GitHub...
+echo 4. Uploading to GitHub...
 echo (A LOGIN POPUP MIGHT APPEAR - PLEASE SIGN IN)
 %GIT_PATH% push -u origin main
 echo.
@@ -25,7 +23,7 @@ if %errorlevel% neq 0 (
     echo [!!!] UPLOAD FAILED! 
     echo Please see the error message above.
 ) else (
-    echo [SUCCESS] Upload complete!
+    echo [SUCCESS] Your code is now online at Brandeck-ERP1!
 )
 echo.
 echo ==========================================
