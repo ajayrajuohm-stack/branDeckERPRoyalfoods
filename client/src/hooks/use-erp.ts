@@ -956,3 +956,26 @@ export const useStockLedger = (itemId?: number, warehouseId?: number) =>
     },
     enabled: !!itemId,
   });
+
+export const useWipeStock = () => {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/wipe-stock-ledger", {
+        method: "POST",
+      });
+      if (!res.ok) throw new Error("Wipe failed");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/reports/stock"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/reports/dashboard"] });
+      toast({ title: "Stock Reset", description: data.message });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+};

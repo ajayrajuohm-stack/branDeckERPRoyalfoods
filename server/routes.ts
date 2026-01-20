@@ -3160,4 +3160,16 @@ export async function registerRoutes(_server: any, app: Express) {
       res.status(500).json({ message: err.message || "Reconciliation failed" });
     }
   });
+
+  // 🔹 WIPE ALL STOCK (DANGEROUS - RESET EVERYTHING TO ZERO)
+  app.post("/api/admin/wipe-stock-ledger", async (_req, res) => {
+    try {
+      console.log("[WIPE] Wiping entire stock ledger as requested by user!");
+      await db.delete(stockLedger);
+      res.json({ message: "Stock ledger cleared. All stock levels reset to 0." });
+    } catch (err: any) {
+      handleDbError(err, res);
+    }
+  });
 }
+

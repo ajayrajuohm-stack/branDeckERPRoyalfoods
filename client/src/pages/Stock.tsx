@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useStockReport, useWarehouses, useCategories, useDashboardStats, useReconcileStock } from "@/hooks/use-erp";
+import { useStockReport, useWarehouses, useCategories, useDashboardStats, useReconcileStock, useWipeStock } from "@/hooks/use-erp";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
@@ -29,6 +29,7 @@ export default function Stock() {
   const { data: categories } = useCategories().list;
   const { data: dashboardStats } = useDashboardStats();
   const reconcileStock = useReconcileStock();
+  const wipeStock = useWipeStock();
   const { data: ledgerHistory, isLoading: isLoadingLedger } = useStockLedger(
     selectedItemForLedger?.id,
     warehouseFilter === "all" ? undefined : Number(warehouseFilter)
@@ -212,6 +213,17 @@ export default function Stock() {
                 title="Fixes stock levels if they are incorrect due to deleted transactions"
               >
                 {reconcileStock.isPending ? "Fixing..." : "Recalculate Stock"}
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => {
+                  if (confirm("DANGER: This will delete ALL stock history and reset all items to 0. This cannot be undone. Are you sure?")) {
+                    wipeStock.mutate();
+                  }
+                }}
+                disabled={wipeStock.isPending}
+              >
+                {wipeStock.isPending ? "Resetting..." : "Reset All Stock"}
               </Button>
               <Button variant="outline" onClick={handleExportStock} disabled={!filteredStock?.length} data-testid="button-export-stock">
                 <Download className="w-4 h-4 mr-2" /> Export
