@@ -579,3 +579,98 @@ export const stockColumns = [
   { header: 'Quantity', key: 'quantity', width: 12 },
   { header: 'Unit', key: 'unit', width: 10 }
 ];
+
+// --- BULK EXPORT FOR IMPORT ---
+
+export async function exportPurchasesBulk(purchases: any[]) {
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet('Purchases');
+
+  worksheet.columns = [
+    { header: 'ID', key: 'ID', width: 10 },
+    { header: 'DATE', key: 'DATE', width: 15 },
+    { header: 'SUPPLIER', key: 'SUPPLIER', width: 25 },
+    { header: 'WAREHOUSE', key: 'WAREHOUSE', width: 20 },
+    { header: 'ITEM', key: 'ITEM', width: 25 },
+    { header: 'QUANTITY', key: 'QUANTITY', width: 12 },
+    { header: 'RATE', key: 'RATE', width: 12 },
+    { header: 'PAID_AMOUNT', key: 'PAID_AMOUNT', width: 15 },
+    { header: 'DUE_DATE', key: 'DUE_DATE', width: 15 },
+  ];
+
+  purchases.forEach(p => {
+    p.lineItems.forEach((li: any) => {
+      worksheet.addRow({
+        ID: p.id,
+        DATE: p.purchaseDate || p.date,
+        SUPPLIER: p.supplier,
+        WAREHOUSE: p.warehouse,
+        ITEM: li.item || '',
+        QUANTITY: li.quantity,
+        RATE: li.rate,
+        PAID_AMOUNT: p.payingAmount || p.paid,
+        DUE_DATE: p.dueDate || '',
+      });
+    });
+  });
+
+  worksheet.getRow(1).font = { bold: true };
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `Purchases_Bulk_Export_${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
+  a.click();
+  window.URL.revokeObjectURL(url);
+}
+
+export async function exportSalesBulk(sales: any[]) {
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet('Sales');
+
+  worksheet.columns = [
+    { header: 'ID', key: 'ID', width: 10 },
+    { header: 'DATE', key: 'DATE', width: 15 },
+    { header: 'CUSTOMER', key: 'CUSTOMER', width: 25 },
+    { header: 'WAREHOUSE', key: 'WAREHOUSE', width: 20 },
+    { header: 'ITEM', key: 'ITEM', width: 25 },
+    { header: 'QUANTITY', key: 'QUANTITY', width: 12 },
+    { header: 'RATE', key: 'RATE', width: 12 },
+    { header: 'RECEIVED_AMOUNT', key: 'RECEIVED_AMOUNT', width: 15 },
+    { header: 'DUE_DATE', key: 'DUE_DATE', width: 15 },
+    { header: 'GST_RATE', key: 'GST_RATE', width: 10 },
+    { header: 'EWAY_BILL_NO', key: 'EWAY_BILL_NO', width: 20 },
+  ];
+
+  sales.forEach(s => {
+    s.lineItems.forEach((li: any) => {
+      worksheet.addRow({
+        ID: s.id,
+        DATE: s.saleDate || s.date,
+        CUSTOMER: s.customer,
+        WAREHOUSE: s.warehouse,
+        ITEM: li.item || '',
+        QUANTITY: li.quantity,
+        RATE: li.rate,
+        RECEIVED_AMOUNT: s.receivedAmount || s.received,
+        DUE_DATE: s.dueDate || '',
+        GST_RATE: li.gstRate || 0,
+        EWAY_BILL_NO: s.ewayBillNumber || '',
+      });
+    });
+  });
+
+  worksheet.getRow(1).font = { bold: true };
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `Sales_Bulk_Export_${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
+  a.click();
+  window.URL.revokeObjectURL(url);
+}
+

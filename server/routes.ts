@@ -7,6 +7,7 @@ import { format } from "date-fns";
 
 import { db } from "./db";
 import { getCurrentStock } from "./storage/stock";
+import { importPurchasesFromExcel, importSalesFromExcel } from "./import-transactions";
 
 import {
   categories,
@@ -113,6 +114,29 @@ export async function registerRoutes(_server: any, app: Express) {
       handleDbError(err, res);
     }
   });
+
+  // 🔹 IMPORT PURCHASES
+  app.post("/api/purchases/import", upload.single("file"), async (req, res) => {
+    try {
+      if (!req.file) return res.status(400).json({ message: "No file uploaded" });
+      const result = await importPurchasesFromExcel(req.file.path);
+      res.json(result);
+    } catch (err) {
+      handleDbError(err, res);
+    }
+  });
+
+  // 🔹 IMPORT SALES
+  app.post("/api/sales/import", upload.single("file"), async (req, res) => {
+    try {
+      if (!req.file) return res.status(400).json({ message: "No file uploaded" });
+      const result = await importSalesFromExcel(req.file.path);
+      res.json(result);
+    } catch (err) {
+      handleDbError(err, res);
+    }
+  });
+
 
   // 🔹 SYNC BALANCES (FIX OUT-OF-SYNC PAYMENTS)
   app.get("/api/debug/sync-balances", async (_req, res) => {
@@ -2817,61 +2841,74 @@ export async function registerRoutes(_server: any, app: Express) {
   // DELETE production run and reverse stock
   app.delete("/api/production/:id", async (req, res) => {
     try {
-      const runId = parseInt(req.params.id);
-
-      // Get production run details
-      const [run] = await db
-        .select()
-        .from(productionRuns)
-        .where(eq(productionRuns.id, runId))
-        .limit(1);
-
-      if (!run) {
-        return res.status(404).json({ message: "Production run not found" });
+      const runId = Number(req.params.id);
+      if (isNaN(runId)) {
+        return res.status(400).json({ message: "Invalid production run ID" });
       }
 
-      // Get all consumptions
-      const consumptions = await db
-        .select()
-        .from(productionConsumptions)
-        .where(eq(productionConsumptions.productionRunId, runId));
+      await db.transaction(async (tx) => {
+        // 1. Get production run details
+        const [run] = await tx
+          .select()
+          .from(productionRuns)
+          .where(eq(productionRuns.id, runId))
+          .limit(1);
 
-      console.log(`Reversing production run ${runId}...`);
+        if (!run) {
+          throw new Error("Production run not found");
+        }
 
-      const relatedEntries = await db
-        .select()
-        .from(stockLedger)
-        .where(
-          and(
-            eq(stockLedger.referenceId, runId),
-            sql`${stockLedger.referenceType} LIKE 'PRODUCTION%'`
-          )
-        );
+        // 2. Reverse stock ledger entries
+        // IMPORTANT: Only reverse original PRODUCTION/CONSUMPTION entries, 
+        // DO NOT reverse previous reversals or updates to avoid feedback loops if called multiple times.
+        const relatedEntries = await tx
+          .select()
+          .from(stockLedger)
+          .where(
+            and(
+              eq(stockLedger.referenceId, runId),
+              inArray(stockLedger.referenceType, [
+                "PRODUCTION",
+                "PRODUCTION_CONSUMPTION",
+                "PRODUCTION_ADJUSTMENT"
+              ])
+            )
+          );
 
-      // 2. Reverse them to bring the net effect of this run to 0
-      for (const entry of relatedEntries) {
-        await db.insert(stockLedger).values({
-          itemId: entry.itemId,
-          warehouseId: entry.warehouseId,
-          quantity: String(-Number(entry.quantity)), // Simply invert it
-          referenceType: "PRODUCTION_REVERSAL",
-          referenceId: runId,
-          createdAt: entry.createdAt, // Match original entry's date for consistent reporting
-        });
-        console.log(`Reversed entry for item ${entry.itemId}: ${-Number(entry.quantity)} at ${entry.createdAt}`);
-      }
+        console.log(`Reversing ${relatedEntries.length} entries for production run ${runId}...`);
 
-      // 3. Delete the production run (cascade will delete consumption records)
-      await db.delete(productionRuns).where(eq(productionRuns.id, runId));
+        for (const entry of relatedEntries) {
+          await tx.insert(stockLedger).values({
+            itemId: entry.itemId,
+            warehouseId: entry.warehouseId,
+            quantity: String(-Number(entry.quantity)),
+            referenceType: "PRODUCTION_REVERSAL",
+            referenceId: runId,
+            createdAt: entry.createdAt,
+          });
+        }
 
-      console.log(`Production run ${runId} deleted`);
+        // 3. Delete the production run (cascade will delete consumption records)
+        const deleted = await tx.delete(productionRuns).where(eq(productionRuns.id, runId)).returning();
+
+        if (deleted.length === 0) {
+          throw new Error("Failed to delete production run record");
+        }
+
+        console.log(`Production run ${runId} deleted successfully`);
+      });
 
       res.json({ message: "Production run deleted and stock reversed" });
-    } catch (err) {
+    } catch (err: any) {
       console.error("Production DELETE error:", err);
+      // Return 404 if not found, else 500
+      if (err.message === "Production run not found") {
+        return res.status(404).json({ message: err.message });
+      }
       handleDbError(err, res);
     }
   });
+
 
   // UPDATE production run
   app.put("/api/production/:id", async (req, res) => {

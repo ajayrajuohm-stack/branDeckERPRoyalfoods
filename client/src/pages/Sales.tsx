@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Trash2, ChevronDown, ChevronRight, DollarSign, Building2, Search, X, Download, CreditCard, AlertTriangle, Package, Edit, Printer } from "lucide-react";
+import { Plus, Trash2, ChevronDown, ChevronRight, DollarSign, Building2, Search, X, Download, Upload, CreditCard, AlertTriangle, Package, Edit, Printer } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -24,7 +24,8 @@ import {
   exportToExcel,
   exportOrderToExcel,
   formatSalesForExport,
-  salesColumns
+  salesColumns,
+  exportSalesBulk
 } from "@/lib/excel-export";
 import { generateEwayBillJson, downloadJson } from "@/lib/eway-bill-utils";
 import { EwayBillPrint } from "@/components/EwayBillPrint";
@@ -1325,6 +1326,23 @@ export default function Sales() {
     await exportToExcel(data, salesColumns, 'sales');
   };
 
+  const handleBulkExport = async () => {
+    if (!sales?.length) return;
+    await exportSalesBulk(sales);
+  };
+
+  const handleImportExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      salesHook.importExcel.mutate(file, {
+        onSuccess: () => {
+          e.target.value = ""; // Reset
+        }
+      });
+    }
+  };
+
+
   const handleExportSingleSale = async (sale: any) => {
     // Find full customer details
     const customer = customers.find((c: any) => c.id === sale.customerId);
@@ -1449,7 +1467,32 @@ export default function Sales() {
                 </Button>
               )}
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 items-center">
+              <input
+                type="file"
+                className="hidden"
+                id="sales-import-new"
+                accept=".xlsx,.xls"
+                onChange={handleImportExcel}
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => document.getElementById('sales-import-new')?.click()}
+                className="border-blue-600 text-blue-600 hover:bg-blue-50"
+                data-testid="button-import-excel-sales"
+              >
+                <Upload className="w-4 h-4 mr-1" /> Import Excel
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleBulkExport}
+                className="border-green-600 text-green-600 hover:bg-green-50"
+                data-testid="button-bulk-export-sales"
+              >
+                <Download className="w-4 h-4 mr-1" /> Bulk Export
+              </Button>
               <Button variant="outline" size="sm" onClick={handleExportSales} disabled={!filteredSales?.length} data-testid="button-export-sales">
                 <Download className="w-4 h-4 mr-1" /> Export
               </Button>

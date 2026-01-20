@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DataTable } from "@/components/DataTable";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Trash2, ChevronDown, ChevronRight, DollarSign, CreditCard, Building2, Search, X, Download, Edit } from "lucide-react";
+import { Plus, Trash2, ChevronDown, ChevronRight, DollarSign, CreditCard, Building2, Search, X, Download, Upload, Edit } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -27,7 +27,8 @@ import {
   formatPaymentsForExport,
   purchaseColumns,
   issueColumns,
-  paymentColumns
+  paymentColumns,
+  exportPurchasesBulk
 } from "@/lib/excel-export";
 
 interface LineItem {
@@ -1111,6 +1112,23 @@ export default function Transactions() {
     await exportToExcel(data, purchaseColumns, 'purchases');
   };
 
+  const handleBulkExport = async () => {
+    if (!purchases?.length) return;
+    await exportPurchasesBulk(purchases);
+  };
+
+  const handleImportExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      purchasesHook.importExcel.mutate(file, {
+        onSuccess: () => {
+          e.target.value = ""; // Reset
+        }
+      });
+    }
+  };
+
+
   const handleExportTransfers = async () => {
     if (!transfers?.length) return;
     const data = formatIssuesForExport(transfers, getItemName, getWarehouseName);
@@ -1252,7 +1270,32 @@ export default function Transactions() {
                 </Button>
               )}
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 items-center">
+              <input
+                type="file"
+                className="hidden"
+                id="purchases-import-new"
+                accept=".xlsx,.xls"
+                onChange={handleImportExcel}
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => document.getElementById('purchases-import-new')?.click()}
+                className="border-blue-600 text-blue-600 hover:bg-blue-50"
+                data-testid="button-import-excel-purchases"
+              >
+                <Upload className="w-4 h-4 mr-1" /> Import Excel
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleBulkExport}
+                className="border-green-600 text-green-600 hover:bg-green-50"
+                data-testid="button-bulk-export-purchases"
+              >
+                <Download className="w-4 h-4 mr-1" /> Bulk Export
+              </Button>
               <Button variant="outline" size="sm" onClick={handleExportPurchases} disabled={!filteredPurchases?.length} data-testid="button-export-purchases">
                 <Download className="w-4 h-4 mr-1" /> Export
               </Button>

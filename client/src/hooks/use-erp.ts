@@ -172,7 +172,38 @@ export const usePurchases = () => {
     },
   });
 
-  return { ...baseCrud, remove };
+  const importExcel = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/purchases/import", {
+        method: "POST",
+        body: formData,
+      });
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ message: "Import failed" }));
+        throw new Error(errorData.message || "Import failed");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/purchases"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/reports/stock"] });
+      toast({
+        title: "Import Success",
+        description: `Imported ${data.success} records. Failed: ${data.failed}`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Import Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  return { ...baseCrud, remove, importExcel };
 };
 
 export const useSales = () => {
@@ -207,7 +238,38 @@ export const useSales = () => {
     },
   });
 
-  return { ...baseCrud, remove };
+  const importExcel = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/sales/import", {
+        method: "POST",
+        body: formData,
+      });
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ message: "Import failed" }));
+        throw new Error(errorData.message || "Import failed");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/sales"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/reports/stock"] });
+      toast({
+        title: "Import Success",
+        description: `Imported ${data.success} records. Failed: ${data.failed}`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Import Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  return { ...baseCrud, remove, importExcel };
 };
 
 export const useStockTransfers = () =>
@@ -273,7 +335,7 @@ export const useProduction = () => {
         const contentType = res.headers.get("Content-Type");
         if (contentType && contentType.includes("application/json")) {
           const err = await res.json();
-          throw new Error(err.message || `Failed to update ${entityName}`);
+          throw new Error(err.message || `Failed to update Production Run`);
         } else {
           const text = await res.text();
           console.error("Non-JSON error response:", text);
@@ -294,7 +356,35 @@ export const useProduction = () => {
     },
   });
 
-  return { ...result, create, update };
+  const remove = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await fetch(`/api/production/${id}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ message: "Failed to delete Production Run" }));
+        throw new Error(errorData.message || "Failed to delete Production Run");
+      }
+      return res.json().catch(() => ({}));
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/production"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/reports/stock"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/reports/dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/reports/detailed-dashboard"] });
+      toast({ title: "Success", description: "Production Run deleted" });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete Production Run",
+        variant: "destructive"
+      });
+    },
+  });
+
+  return { ...result, create, update, remove };
+
 };
 
 /* =========================================================
