@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useStockReport, useWarehouses, useCategories, useDashboardStats, useReconcileStock, useWipeStock } from "@/hooks/use-erp";
+import { useStockReport, useWarehouses, useCategories, useDashboardStats } from "@/hooks/use-erp";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
@@ -7,33 +7,17 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Package, Warehouse, Search, AlertTriangle, CheckCircle, Download, X } from "lucide-react";
 import { exportToExcel, formatStockForExport, stockColumns } from "@/lib/excel-export";
-import { useStockLedger } from "@/hooks/use-erp";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { format } from "date-fns";
-import { History } from "lucide-react";
 
 export default function Stock() {
   const [warehouseFilter, setWarehouseFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [stockStatusFilter, setStockStatusFilter] = useState<string>("all"); // all, low, out
-  const [selectedItemForLedger, setSelectedItemForLedger] = useState<{ id: number; name: string } | null>(null);
 
   const { data: stock, isLoading } = useStockReport(warehouseFilter === "all" ? undefined : warehouseFilter);
   const { data: warehouses } = useWarehouses().list;
   const { data: categories } = useCategories().list;
   const { data: dashboardStats } = useDashboardStats();
-  const reconcileStock = useReconcileStock();
-  const wipeStock = useWipeStock();
-  const { data: ledgerHistory, isLoading: isLoadingLedger } = useStockLedger(
-    selectedItemForLedger?.id,
-    warehouseFilter === "all" ? undefined : Number(warehouseFilter)
-  );
 
   const filteredStock = stock?.filter((item: any) => {
     const matchesSearch = item.itemName.toLowerCase().includes(search.toLowerCase()) ||
@@ -206,25 +190,6 @@ export default function Stock() {
                   ))}
                 </SelectContent>
               </Select>
-              <Button
-                variant="outline"
-                onClick={() => reconcileStock.mutate()}
-                disabled={reconcileStock.isPending}
-                title="Fixes stock levels if they are incorrect due to deleted transactions"
-              >
-                {reconcileStock.isPending ? "Fixing..." : "Recalculate Stock"}
-              </Button>
-              <Button
-                variant="destructive"
-                onClick={() => {
-                  if (confirm("DANGER: This will delete ALL stock history and reset all items to 0. This cannot be undone. Are you sure?")) {
-                    wipeStock.mutate();
-                  }
-                }}
-                disabled={wipeStock.isPending}
-              >
-                {wipeStock.isPending ? "Resetting..." : "Reset All Stock"}
-              </Button>
               <Button variant="outline" onClick={handleExportStock} disabled={!filteredStock?.length} data-testid="button-export-stock">
                 <Download className="w-4 h-4 mr-2" /> Export
               </Button>
@@ -260,16 +225,10 @@ export default function Stock() {
                     return (
                       <tr
                         key={idx}
-                        className="border-b hover-elevate transition-colors cursor-pointer group"
+                        className="border-b hover-elevate transition-colors"
                         data-testid={`row-stock-${idx}`}
-                        onClick={() => setSelectedItemForLedger({ id: item.itemId, name: item.itemName })}
                       >
-                        <td className="p-3">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium">{item.itemName}</span>
-                            <History className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                          </div>
-                        </td>
+                        <td className="p-3 font-medium">{item.itemName}</td>
                         <td className="p-3 text-muted-foreground">{item.warehouseName}</td>
                         <td className="p-3 text-right">
                           <span className={`font-mono font-bold text-lg ${isOut ? 'text-destructive' : isLow ? 'text-amber-500' : ''}`}>
@@ -299,60 +258,6 @@ export default function Stock() {
                   })}
                 </tbody>
               </table>
-
-              {/* STOCK LEDGER HISTORY MODAL */}
-              <Dialog open={!!selectedItemForLedger} onOpenChange={(open) => !open && setSelectedItemForLedger(null)}>
-                <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
-                  <DialogHeader>
-                    <DialogTitle className="flex items-center gap-2">
-                      <History className="w-5 h-5" />
-                      Stock Transaction History: {selectedItemForLedger?.name}
-                    </DialogTitle>
-                  </DialogHeader>
-
-                  <div className="mt-4">
-                    {isLoadingLedger ? (
-                      <div className="text-center py-4 text-muted-foreground">Loading history...</div>
-                    ) : !ledgerHistory?.length ? (
-                      <div className="text-center py-4 text-muted-foreground">No transaction history found.</div>
-                    ) : (
-                      <div className="overflow-x-auto border rounded-md">
-                        <table className="w-full text-sm">
-                          <thead className="bg-muted">
-                            <tr>
-                              <th className="p-2 text-left">Date</th>
-                              <th className="p-2 text-left">Type</th>
-                              <th className="p-2 text-left">Ref ID</th>
-                              <th className="p-2 text-left">Warehouse</th>
-                              <th className="p-2 text-right">Qty Change</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {ledgerHistory.map((entry: any, i: number) => {
-                              const qty = Number(entry.quantity);
-                              return (
-                                <tr key={i} className="border-t">
-                                  <td className="p-2">{entry.createdAt ? format(new Date(entry.createdAt), "dd MMM yyyy HH:mm") : "-"}</td>
-                                  <td className="p-2">
-                                    <Badge variant="outline" className="text-[10px] uppercase font-mono">
-                                      {entry.referenceType?.replace(/_/g, " ")}
-                                    </Badge>
-                                  </td>
-                                  <td className="p-2 text-muted-foreground font-mono">#{entry.referenceId}</td>
-                                  <td className="p-2 text-muted-foreground">{entry.warehouseName}</td>
-                                  <td className={`p-2 text-right font-mono font-bold ${qty > 0 ? "text-green-600" : "text-destructive"}`}>
-                                    {qty > 0 ? "+" : ""}{qty.toFixed(2)}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-                </DialogContent>
-              </Dialog>
             </div>
           )}
         </CardContent>
@@ -360,4 +265,3 @@ export default function Stock() {
     </div>
   );
 }
-

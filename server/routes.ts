@@ -1860,35 +1860,6 @@ export async function registerRoutes(_server: any, app: Express) {
     }
   });
 
-  // Stock Audit Trail for specific item
-  app.get("/api/reports/stock-ledger/:itemId", async (req, res) => {
-    try {
-      const itemId = parseInt(req.params.itemId);
-      const warehouseId = req.query.warehouseId ? parseInt(req.query.warehouseId as string) : undefined;
-
-      const conditions = [eq(stockLedger.itemId, itemId)];
-      if (warehouseId) conditions.push(eq(stockLedger.warehouseId, warehouseId));
-
-      const history = await db
-        .select({
-          id: stockLedger.id,
-          quantity: stockLedger.quantity,
-          referenceType: stockLedger.referenceType,
-          referenceId: stockLedger.referenceId,
-          createdAt: stockLedger.createdAt,
-          warehouseName: warehouses.name,
-        })
-        .from(stockLedger)
-        .leftJoin(warehouses, eq(stockLedger.warehouseId, warehouses.id))
-        .where(and(...conditions))
-        .orderBy(desc(stockLedger.createdAt));
-
-      res.json(history);
-    } catch (err) {
-      handleDbError(err, res);
-    }
-  });
-
   // Sales Trend Report
   app.get("/api/reports/sales-trend", async (req, res) => {
     try {
@@ -3103,80 +3074,7 @@ export async function registerRoutes(_server: any, app: Express) {
       handleDbError(err, res);
     }
   });
-  // 🔹 RECONCILE STOCK (CLEANUP GHOST ENTRIES)
-  app.post("/api/admin/reconcile-stock", async (_req, res) => {
-    try {
-      console.log("[RECONCILE] Starting ultra-fast stock ledger reconciliation...");
 
-      const allLedgerEntries = await db.select().from(stockLedger);
 
-      // Bulk fetch existing IDs to minimize database hits
-      const [pIds, sIds, prIds, stIds] = await Promise.all([
-        db.select({ id: purchases.id }).from(purchases),
-        db.select({ id: sales.id }).from(sales),
-        db.select({ id: productionRuns.id }).from(productionRuns),
-        db.select({ id: stockTransfers.id }).from(stockTransfers)
-      ]);
-
-      const purchaseIds = new Set(pIds.map(o => Number(o.id)));
-      const saleIds = new Set(sIds.map(o => Number(o.id)));
-      const prodIds = new Set(prIds.map(o => Number(o.id)));
-      const transferIds = new Set(stIds.map(o => Number(o.id)));
-
-      const orphanIds: number[] = [];
-
-      for (const entry of allLedgerEntries) {
-        let parentExists = true;
-        const refId = Number(entry.referenceId);
-
-        if (!refId || isNaN(refId)) continue;
-
-        const type = entry.referenceType || "";
-
-        if (type.startsWith("PURCHASE")) {
-          if (!purchaseIds.has(refId)) parentExists = false;
-        }
-        else if (type.startsWith("SALE")) {
-          if (!saleIds.has(refId)) parentExists = false;
-        }
-        else if (type.startsWith("PRODUCTION")) {
-          if (!prodIds.has(refId)) parentExists = false;
-        }
-        else if (type.startsWith("TRANSFER")) {
-          if (!transferIds.has(refId)) parentExists = false;
-        }
-
-        if (!parentExists) {
-          orphanIds.push(entry.id);
-        }
-      }
-
-      if (orphanIds.length > 0) {
-        console.log(`[RECONCILE] Found ${orphanIds.length} orphans. Batch deleting...`);
-        // Delete in chunks of 50 to stay safe with query sizes
-        for (let i = 0; i < orphanIds.length; i += 50) {
-          const chunk = orphanIds.slice(i, i + 50);
-          await db.delete(stockLedger).where(inArray(stockLedger.id, chunk));
-        }
-      }
-
-      console.log(`[RECONCILE] Completed. Deleted ${orphanIds.length} orphaned entries.`);
-      res.json({ message: `Reconciliation complete. Removed ${orphanIds.length} orphaned records.`, deletedCount: orphanIds.length });
-    } catch (err: any) {
-      console.error("[RECONCILE] Error:", err);
-      res.status(500).json({ message: err.message || "Reconciliation failed" });
-    }
-  });
-
-  // 🔹 WIPE ALL STOCK (DANGEROUS - RESET EVERYTHING TO ZERO)
-  app.post("/api/admin/wipe-stock-ledger", async (_req, res) => {
-    try {
-      console.log("[WIPE] Wiping entire stock ledger as requested by user!");
-      await db.delete(stockLedger);
-      res.json({ message: "Stock ledger cleared. All stock levels reset to 0." });
-    } catch (err: any) {
-      handleDbError(err, res);
-    }
-  });
 }
 
