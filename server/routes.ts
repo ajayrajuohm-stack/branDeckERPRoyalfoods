@@ -2688,6 +2688,7 @@ export async function registerRoutes(_server: any, app: Express) {
             standardQty: String(consumption.standardQty),
             actualQty: String(consumption.actualQty),
             openingStock: String(consumption.opening || 0), // Save opening stock
+            variance: String(consumption.variance || 0), // Save variance
             remarks: consumption.remarks || null, // Save line-wise remarks
           });
 
@@ -2698,6 +2699,7 @@ export async function registerRoutes(_server: any, app: Express) {
             quantity: String(-Math.abs(Number(consumption.actualQty))),
             referenceType: "PRODUCTION_CONSUMPTION",
             referenceId: run.id,
+            createdAt: new Date(productionDate), // Use production date for ledger
           });
 
           // Handle Variance / Stock Adjustment (if Actual Closing != System Closing)
@@ -2712,6 +2714,7 @@ export async function registerRoutes(_server: any, app: Express) {
               quantity: String(-variance), // Invert variance for adjustment (Positive variance = missing stock = negative adjustment)
               referenceType: "PRODUCTION_ADJUSTMENT",
               referenceId: run.id,
+              createdAt: new Date(productionDate), // Use production date
             });
             console.log(`Adjusting item ${consumption.itemId} by ${-variance} due to variance.`);
           }
@@ -2730,6 +2733,7 @@ export async function registerRoutes(_server: any, app: Express) {
         quantity: String(outputQuantity),
         referenceType: "PRODUCTION",
         referenceId: run.id,
+        createdAt: new Date(productionDate), // Use production date
       });
 
       console.log(`Produced item ${outputItemId}: +${outputQuantity} (Manual Entry)`);
@@ -2852,8 +2856,9 @@ export async function registerRoutes(_server: any, app: Express) {
           quantity: String(-Number(entry.quantity)), // Simply invert it
           referenceType: "PRODUCTION_REVERSAL",
           referenceId: runId,
+          createdAt: entry.createdAt, // Match original entry's date for consistent reporting
         });
-        console.log(`Reversed entry for item ${entry.itemId}: ${-Number(entry.quantity)}`);
+        console.log(`Reversed entry for item ${entry.itemId}: ${-Number(entry.quantity)} at ${entry.createdAt}`);
       }
 
       // 3. Delete the production run (cascade will delete consumption records)
@@ -2907,6 +2912,7 @@ export async function registerRoutes(_server: any, app: Express) {
             quantity: String(-Number(entry.quantity)),
             referenceType: "PRODUCTION_UPDATE_REVERSAL",
             referenceId: runId,
+            createdAt: entry.createdAt, // Match original entry's date for consistent reporting
           });
         }
 
@@ -2935,6 +2941,7 @@ export async function registerRoutes(_server: any, app: Express) {
               standardQty: String(consumption.standardQty),
               actualQty: String(consumption.actualQty),
               openingStock: String(consumption.opening || 0),
+              variance: String(consumption.variance || 0), // Save variance
               remarks: consumption.remarks || null,
             });
 
@@ -2945,6 +2952,7 @@ export async function registerRoutes(_server: any, app: Express) {
               quantity: String(-Math.abs(Number(consumption.actualQty))),
               referenceType: "PRODUCTION_CONSUMPTION",
               referenceId: runId,
+              createdAt: new Date(productionDate), // Use production date
             });
 
             // Handle Variance / Stock Adjustment
@@ -2956,6 +2964,7 @@ export async function registerRoutes(_server: any, app: Express) {
                 quantity: String(-variance),
                 referenceType: "PRODUCTION_ADJUSTMENT",
                 referenceId: runId,
+                createdAt: new Date(productionDate), // Use production date
               });
             }
           }
@@ -2968,6 +2977,7 @@ export async function registerRoutes(_server: any, app: Express) {
           quantity: String(outputQuantity),
           referenceType: "PRODUCTION",
           referenceId: runId,
+          createdAt: new Date(productionDate), // Use production date
         });
       });
 
