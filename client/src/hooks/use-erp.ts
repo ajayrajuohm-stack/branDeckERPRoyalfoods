@@ -270,8 +270,15 @@ export const useProduction = () => {
         body: JSON.stringify(data),
       });
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.message || "Failed to update Production Run");
+        const contentType = res.headers.get("Content-Type");
+        if (contentType && contentType.includes("application/json")) {
+          const err = await res.json();
+          throw new Error(err.message || `Failed to update ${entityName}`);
+        } else {
+          const text = await res.text();
+          console.error("Non-JSON error response:", text);
+          throw new Error(`Server error (${res.status}): Please check connection or server logs.`);
+        }
       }
       return res.json();
     },
