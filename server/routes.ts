@@ -3106,10 +3106,9 @@ export async function registerRoutes(_server: any, app: Express) {
   // 🔹 RECONCILE STOCK (CLEANUP GHOST ENTRIES)
   app.post("/api/admin/reconcile-stock", async (_req, res) => {
     try {
-      console.log("[RECONCILE] Starting stock ledger reconciliation...");
+      console.log("[RECONCILE] Starting ultra-fast stock ledger reconciliation...");
 
       const allLedgerEntries = await db.select().from(stockLedger);
-      let deletedCount = 0;
 
       // Bulk fetch existing IDs to minimize database hits
       const [pIds, sIds, prIds, stIds] = await Promise.all([
@@ -3119,16 +3118,17 @@ export async function registerRoutes(_server: any, app: Express) {
         db.select({ id: stockTransfers.id }).from(stockTransfers)
       ]);
 
-      const purchaseIds = new Set(pIds.map(o => o.id));
-      const saleIds = new Set(sIds.map(o => o.id));
-      const prodIds = new Set(prIds.map(o => o.id));
-      const transferIds = new Set(stIds.map(o => o.id));
+      const purchaseIds = new Set(pIds.map(o => Number(o.id)));
+      const saleIds = new Set(sIds.map(o => Number(o.id)));
+      const prodIds = new Set(prIds.map(o => Number(o.id)));
+      const transferIds = new Set(stIds.map(o => Number(o.id)));
+
+      const orphanIds: number[] = [];
 
       for (const entry of allLedgerEntries) {
         let parentExists = true;
         const refId = Number(entry.referenceId);
 
-        // If ID is missing or 0, it might be an opening stock or direct entry - KEEP IT
         if (!refId || isNaN(refId)) continue;
 
         const type = entry.referenceType || "";
@@ -3147,14 +3147,21 @@ export async function registerRoutes(_server: any, app: Express) {
         }
 
         if (!parentExists) {
-          console.log(`[RECONCILE] Deleting orphaned entry ${entry.id} (Type: ${type}, RefID: ${refId})`);
-          await db.delete(stockLedger).where(eq(stockLedger.id, entry.id));
-          deletedCount++;
+          orphanIds.push(entry.id);
         }
       }
 
-      console.log(`[RECONCILE] Completed. Deleted ${deletedCount} orphaned entries.`);
-      res.json({ message: `Reconciliation complete. Removed ${deletedCount} orphaned records.`, deletedCount });
+      if (orphanIds.length > 0) {
+        console.log(`[RECONCILE] Found ${orphanIds.length} orphans. Batch deleting...`);
+        // Delete in chunks of 50 to stay safe with query sizes
+        for (let i = 0; i < orphanIds.length; i += 50) {
+          const chunk = orphanIds.slice(i, i + 50);
+          await db.delete(stockLedger).where(inArray(stockLedger.id, chunk));
+        }
+      }
+
+      console.log(`[RECONCILE] Completed. Deleted ${orphanIds.length} orphaned entries.`);
+      res.json({ message: `Reconciliation complete. Removed ${orphanIds.length} orphaned records.`, deletedCount: orphanIds.length });
     } catch (err: any) {
       console.error("[RECONCILE] Error:", err);
       res.status(500).json({ message: err.message || "Reconciliation failed" });
