@@ -3074,6 +3074,49 @@ export async function registerRoutes(_server: any, app: Express) {
       handleDbError(err, res);
     }
   });
+  // 🔹 RECONCILE STOCK (CLEANUP GHOST ENTRIES)
+  app.post("/api/admin/reconcile-stock", async (_req, res) => {
+    try {
+      console.log("[RECONCILE] Starting stock ledger reconciliation...");
+
+      const allLedgerEntries = await db.select().from(stockLedger);
+      let deletedCount = 0;
+
+      for (const entry of allLedgerEntries) {
+        let parentExists = true;
+
+        // Only check entries with common transaction reference types
+        if (entry.referenceType && (entry.referenceType.startsWith("PURCHASE") || entry.referenceType === "PURCHASE_REVERSAL")) {
+          const [p] = await db.select().from(purchases).where(eq(purchases.id, entry.referenceId)).limit(1);
+          if (!p) parentExists = false;
+        }
+        else if (entry.referenceType && (entry.referenceType.startsWith("SALE") || entry.referenceType === "SALE_REVERSAL")) {
+          const [s] = await db.select().from(sales).where(eq(sales.id, entry.referenceId)).limit(1);
+          if (!s) parentExists = false;
+        }
+        else if (entry.referenceType && (entry.referenceType.startsWith("PRODUCTION") || entry.referenceType === "PRODUCTION_REVERSAL")) {
+          const [pr] = await db.select().from(productionRuns).where(eq(productionRuns.id, entry.referenceId)).limit(1);
+          if (!pr) parentExists = false;
+        }
+        else if (entry.referenceType && (entry.referenceType.startsWith("TRANSFER") || entry.referenceType.startsWith("TRANSFER_REV"))) {
+          const [st] = await db.select().from(stockTransfers).where(eq(stockTransfers.id, entry.referenceId)).limit(1);
+          if (!st) parentExists = false;
+        }
+
+        if (!parentExists) {
+          console.log(`[RECONCILE] Deleting orphaned entry ${entry.id} (Type: ${entry.referenceType}, RefID: ${entry.referenceId})`);
+          await db.delete(stockLedger).where(eq(stockLedger.id, entry.id));
+          deletedCount++;
+        }
+      }
+
+      console.log(`[RECONCILE] Completed. Deleted ${deletedCount} orphaned entries.`);
+      res.json({ message: `Reconciliation complete. Removed ${deletedCount} orphaned records.`, deletedCount });
+    } catch (err) {
+      console.error("[RECONCILE] Error:", err);
+      handleDbError(err, res);
+    }
+  });
 
 
 }

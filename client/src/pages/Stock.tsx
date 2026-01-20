@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useStockReport, useWarehouses, useCategories, useDashboardStats } from "@/hooks/use-erp";
+import { useStockReport, useWarehouses, useCategories, useDashboardStats, useReconcileStock } from "@/hooks/use-erp";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,7 @@ export default function Stock() {
   const { data: warehouses } = useWarehouses().list;
   const { data: categories } = useCategories().list;
   const { data: dashboardStats } = useDashboardStats();
+  const reconcileStock = useReconcileStock();
 
   const filteredStock = stock?.filter((item: any) => {
     const matchesSearch = item.itemName.toLowerCase().includes(search.toLowerCase()) ||
@@ -190,6 +191,14 @@ export default function Stock() {
                   ))}
                 </SelectContent>
               </Select>
+              <Button
+                variant="outline"
+                onClick={() => reconcileStock.mutate()}
+                disabled={reconcileStock.isPending}
+                title="Fixes stock levels if they are incorrect due to deleted transactions"
+              >
+                {reconcileStock.isPending ? "Fixing..." : "Recalculate Stock"}
+              </Button>
               <Button variant="outline" onClick={handleExportStock} disabled={!filteredStock?.length} data-testid="button-export-stock">
                 <Download className="w-4 h-4 mr-2" /> Export
               </Button>

@@ -910,3 +910,36 @@ export function useAdminSettings() {
 
   return { data, update };
 }
+
+export const useReconcileStock = () => {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/reconcile-stock", {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ message: "Reconciliation failed" }));
+        throw new Error(err.message || "Reconciliation failed");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/reports/stock"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/reports/dashboard"] });
+      toast({
+        title: "Reconciliation Complete",
+        description: data.message,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+};
