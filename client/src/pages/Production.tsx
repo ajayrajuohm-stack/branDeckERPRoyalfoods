@@ -820,7 +820,7 @@ export default function Production() {
                       </tr>
                       {expandedRun === run.id && run.consumptions?.length > 0 && (
                         <tr className="bg-muted/30">
-                          <td colSpan={7} className="p-0">
+                          <td colSpan={8} className="p-0">
                             <table className="w-full">
                               <thead className="bg-muted/50">
                                 <tr>
@@ -837,17 +837,18 @@ export default function Production() {
                                     Actual Qty
                                   </th>
                                   <th className="p-2 text-center text-xs font-medium text-muted-foreground">
-                                    Closing Stock
+                                    Actual Closing Stock
                                   </th>
                                   <th className="p-2 text-left text-xs font-medium text-muted-foreground">Remarks</th>
                                 </tr>
                               </thead>
                               <tbody>
                                 {run.consumptions.map((consumption: any, idx: number) => {
-                                  // Calculate closing stock: Opening - Actual
+                                  // Calculate actual closing stock: Opening - Actual - Variance
                                   // Use saved opening stock if available (for new records), else 0
                                   const opening = Number(consumption.opening || 0);
-                                  const closing = opening - Number(consumption.actualQty);
+                                  const variance = Number(consumption.variance || 0);
+                                  const actualClosing = opening - Number(consumption.actualQty) - variance;
 
                                   // Calculate Per Batch Qty (Standard / Batches)
                                   // Handle older records where batchCount might be missing (treat as 1 to avoid /0)
@@ -868,7 +869,7 @@ export default function Production() {
                                       </td>
                                       <td className="p-2 text-center">
                                         <Badge variant="outline" className="font-mono">
-                                          {closing.toFixed(2)}
+                                          {actualClosing.toFixed(2)}
                                         </Badge>
                                       </td>
                                       <td className="p-2 text-left text-xs text-muted-foreground">{consumption.remarks || "-"}</td>

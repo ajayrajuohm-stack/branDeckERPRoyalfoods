@@ -102,7 +102,7 @@ export async function exportProductionOrderToExcel(
   worksheet.addRow([]);
 
   // --- CONSUMPTION TABLE ---
-  const tableHeaderRow = worksheet.addRow(['RAW MATERIAL', 'PER BATCH', 'OPENING', 'STANDARD', 'ACTUAL', 'VARIANCE', 'REMARKS']);
+  const tableHeaderRow = worksheet.addRow(['RAW MATERIAL', 'PER BATCH', 'OPENING', 'STANDARD', 'ACTUAL', 'VARIANCE', 'CLOSING STOCK', 'REMARKS']);
   tableHeaderRow.eachCell((cell) => {
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: themeColor } };
     cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
@@ -114,13 +114,19 @@ export async function exportProductionOrderToExcel(
   if (run.consumptions && Array.isArray(run.consumptions)) {
     run.consumptions.forEach((c: any, index: number) => {
       const perBatch = Number(c.standardQty) / (Number(run.batchCount) || 1);
+      const opening = Number(c.opening || 0);
+      const actual = Number(c.actualQty || 0);
+      const variance = Number(c.variance || 0);
+      const closing = opening - actual - variance;
+
       const row = worksheet.addRow([
         c.itemName,
         perBatch.toFixed(3),
-        Number(c.opening || 0).toFixed(2),
+        opening.toFixed(2),
         Number(c.standardQty).toFixed(2),
-        Number(c.actualQty).toFixed(2),
-        Number(c.variance || 0).toFixed(2),
+        actual.toFixed(2),
+        variance.toFixed(2),
+        closing.toFixed(2),
         c.remarks || ''
       ]);
 
@@ -134,11 +140,10 @@ export async function exportProductionOrderToExcel(
       row.eachCell(cell => cell.border = borderStyle);
 
       row.getCell(1).alignment = { horizontal: 'left' };
-      [2, 3, 4, 5, 6].forEach(i => row.getCell(i).alignment = { horizontal: 'right' });
-      row.getCell(7).alignment = { horizontal: 'left', wrapText: true }; // Remarks align left
+      [2, 3, 4, 5, 6, 7].forEach(i => row.getCell(i).alignment = { horizontal: 'right' });
+      row.getCell(8).alignment = { horizontal: 'left', wrapText: true }; // Remarks align left
 
       // Variance coloring
-      const variance = Number(c.variance);
       if (variance !== 0) {
         row.getCell(6).font = { bold: true, color: { argb: variance < 0 ? 'FFFF0000' : 'FF00B050' } };
       }
