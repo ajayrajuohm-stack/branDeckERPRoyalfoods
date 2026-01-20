@@ -73,6 +73,9 @@ function useCrud(
       queryClient.invalidateQueries({ queryKey: [listUrl] });
       toast({ title: "Success", description: `${entityName} updated` });
     },
+    onError: (e: Error) => {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    },
   });
 
   const remove = useMutation({
@@ -258,7 +261,33 @@ export const useProduction = () => {
     },
   });
 
-  return { ...result, create };
+  // Override update to invalidate stock queries
+  const update = useMutation({
+    mutationFn: async ({ id, ...data }: any) => {
+      const res = await fetch(`/api/production/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Failed to update Production Run");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/production"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/reports/stock"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/reports/dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/reports/detailed-dashboard"] });
+      toast({ title: "Success", description: "Production Run updated" });
+    },
+    onError: (e: Error) => {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    },
+  });
+
+  return { ...result, create, update };
 };
 
 /* =========================================================
