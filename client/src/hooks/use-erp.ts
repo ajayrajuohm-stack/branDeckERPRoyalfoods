@@ -910,3 +910,47 @@ export function useAdminSettings() {
 
   return { data, update };
 }
+
+export const useTrash = () => {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const list = useQuery<any>({
+    queryKey: ["/api/trash"],
+    queryFn: async () => {
+      const res = await fetch("/api/trash");
+      if (!res.ok) throw new Error("Failed to load trash");
+      return res.json();
+    },
+  });
+
+  const restore = useMutation({
+    mutationFn: async ({ type, id }: { type: string; id: number }) => {
+      const res = await fetch(`/api/trash/restore/${type}/${id}`, { method: "POST" });
+      if (!res.ok) throw new Error("Restore failed");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/trash"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/purchases"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/sales"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/production"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/reports/stock"] });
+      toast({ title: "Restored", description: data.message });
+    },
+  });
+
+  const permanentDelete = useMutation({
+    mutationFn: async ({ type, id }: { type: string; id: number }) => {
+      const res = await fetch(`/api/trash/permanent/${type}/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Delete failed");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/trash"] });
+      toast({ title: "Deleted", description: data.message });
+    },
+  });
+
+  return { list, restore, permanentDelete };
+};

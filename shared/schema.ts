@@ -178,6 +178,8 @@ export const productionRuns = pgTable("production_runs", {
     .notNull(),
   batchCount: numeric("batch_count").notNull().default("0"),
   remarks: text("remarks"),
+  isDeleted: boolean("is_deleted").notNull().default(false),
+  deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -213,6 +215,8 @@ export const purchases = pgTable("purchases", {
   totalAmount: numeric("total_amount").notNull(),
   payingAmount: numeric("paying_amount").notNull().default("0"),
   dueDate: date("due_date"),
+  isDeleted: boolean("is_deleted").notNull().default(false),
+  deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -256,6 +260,8 @@ export const sales = pgTable("sales", {
   cgstAmount: numeric("cgst_amount").default("0"),
   sgstAmount: numeric("sgst_amount").default("0"),
   igstAmount: numeric("igst_amount").default("0"),
+  isDeleted: boolean("is_deleted").notNull().default(false),
+  deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

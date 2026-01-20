@@ -15,6 +15,7 @@ import Production from "@/pages/Production";
 import Reports from "@/pages/Reports";
 import Backup from "@/pages/Backup";
 import Stock from "@/pages/Stock";
+import Trash from "@/pages/Trash";
 import { Sidebar, SidebarContent } from "@/components/Sidebar";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Menu, Package } from "lucide-react";
@@ -59,6 +60,7 @@ function Router() {
               <ProtectedRoute path="/stock" component={Stock} />
               <ProtectedRoute path="/reports" component={Reports} />
               <ProtectedRoute path="/backup" component={Backup} />
+              <ProtectedRoute path="/trash" component={Trash} />
               <Route component={NotFound} />
             </Switch>
           </main>

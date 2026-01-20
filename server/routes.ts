@@ -568,6 +568,7 @@ export async function registerRoutes(_server: any, app: Express) {
   // 🔹 GET PURCHASES (WITH JOINS)
   app.get("/api/purchases", async (_req, res) => {
     const rows = await db.query.purchases.findMany({
+      where: (p, { eq }) => eq(p.isDeleted, false),
       with: {
         supplier: true,
         warehouse: true,
@@ -696,6 +697,35 @@ export async function registerRoutes(_server: any, app: Express) {
         return res.status(404).json({ message: "Purchase not found" });
       }
 
+      // 🔐 Check for dependent production runs
+      // If production was recorded after or on the same day as the purchase, 
+      // we should warn the user to delete production first.
+      const itemIds = purchaseItemsData.map(i => i.itemId);
+      if (itemIds.length > 0) {
+        const dependentProduction = await db
+          .select({
+            id: productionRuns.id,
+            productionDate: productionRuns.productionDate,
+          })
+          .from(productionRuns)
+          .innerJoin(productionConsumptions, eq(productionRuns.id, productionConsumptions.productionRunId))
+          .where(
+            and(
+              inArray(productionConsumptions.itemId, itemIds),
+              gte(productionRuns.productionDate, purchase.purchaseDate),
+              eq(productionRuns.isDeleted, false)
+            )
+          )
+          .limit(1);
+
+        if (dependentProduction.length > 0) {
+          const formattedDate = format(new Date(dependentProduction[0].productionDate), "dd/MM/yyyy");
+          return res.status(400).json({
+            message: `Cannot delete purchase. Production order(s) (e.g., from ${formattedDate}) have been recorded after this purchase using these items. Please delete the associated production orders first to maintain stock integrity.`
+          });
+        }
+      }
+
       // Reverse stock ledger entries (subtract the quantities that were added)
       for (const item of purchaseItemsData) {
         await db.insert(stockLedger).values({
@@ -707,10 +737,12 @@ export async function registerRoutes(_server: any, app: Express) {
         });
       }
 
-      // Delete purchase (cascade will delete purchase items)
-      await db.delete(purchases).where(eq(purchases.id, purchaseId));
+      // Soft delete purchase instead of physical delete
+      await db.update(purchases)
+        .set({ isDeleted: true, deletedAt: new Date() })
+        .where(eq(purchases.id, purchaseId));
 
-      res.json({ message: "Purchase deleted and stock reversed" });
+      res.json({ message: "Purchase moved to trash and stock reversed" });
     } catch (err) {
       console.error("Purchase DELETE error:", err);
       handleDbError(err, res);
@@ -822,6 +854,7 @@ export async function registerRoutes(_server: any, app: Express) {
   // 🔹 GET SALES (WITH JOINS)
   app.get("/api/sales", async (_req, res) => {
     const rows = await db.query.sales.findMany({
+      where: (s, { eq }) => eq(s.isDeleted, false),
       with: {
         customer: true,
         warehouse: true,
@@ -1019,10 +1052,12 @@ export async function registerRoutes(_server: any, app: Express) {
         });
       }
 
-      // Delete sale (cascade will delete sale items)
-      await db.delete(sales).where(eq(sales.id, saleId));
+      // Soft delete sale instead of physical delete
+      await db.update(sales)
+        .set({ isDeleted: true, deletedAt: new Date() })
+        .where(eq(sales.id, saleId));
 
-      res.json({ message: "Sale deleted and stock reversed" });
+      res.json({ message: "Sale moved to trash and stock reversed" });
     } catch (err) {
       handleDbError(err, res);
     }
@@ -2772,6 +2807,7 @@ export async function registerRoutes(_server: any, app: Express) {
   app.get("/api/production", async (_req, res) => {
     try {
       const runs = await db.query.productionRuns.findMany({
+        where: (pr, { eq }) => eq(pr.isDeleted, false),
         orderBy: (pr, { desc }) => [desc(pr.productionDate)],
       });
 
@@ -2897,17 +2933,20 @@ export async function registerRoutes(_server: any, app: Express) {
           });
         }
 
-        // 3. Delete the production run (cascade will delete consumption records)
-        const deleted = await tx.delete(productionRuns).where(eq(productionRuns.id, runId)).returning();
+        // 3. Move the production run to trash instead of deleting
+        const updated = await tx.update(productionRuns)
+          .set({ isDeleted: true, deletedAt: new Date() })
+          .where(eq(productionRuns.id, runId))
+          .returning();
 
-        if (deleted.length === 0) {
-          throw new Error("Failed to delete production run record");
+        if (updated.length === 0) {
+          throw new Error("Failed to move production run to trash");
         }
 
-        console.log(`Production run ${runId} deleted successfully`);
+        console.log(`Production run ${runId} moved to trash successfully`);
       });
 
-      res.json({ message: "Production run deleted and stock reversed" });
+      res.json({ message: "Production run moved to trash and stock reversed" });
     } catch (err: any) {
       console.error("Production DELETE error:", err);
       // Return 404 if not found, else 500
@@ -3076,5 +3115,155 @@ export async function registerRoutes(_server: any, app: Express) {
   });
 
 
+
+  /* =======================
+     TRASH / RECYCLE BIN
+  ======================= */
+
+  // 🔹 GET ALL TRASHED ITEMS
+  app.get("/api/trash", async (_req, res) => {
+    try {
+      const trashedPurchases = await db.query.purchases.findMany({
+        where: eq(purchases.isDeleted, true),
+        with: { supplier: true }
+      });
+      const trashedSales = await db.query.sales.findMany({
+        where: eq(sales.isDeleted, true),
+        with: { customer: true }
+      });
+      const trashedProduction = await db.query.productionRuns.findMany({
+        where: eq(productionRuns.isDeleted, true),
+        with: { outputItem: true }
+      });
+
+      const response = {
+        purchases: trashedPurchases.map(p => ({
+          id: p.id,
+          date: p.purchaseDate,
+          entity: p.supplier?.name || "-",
+          amount: p.totalAmount,
+          deletedAt: p.deletedAt,
+          type: "PURCHASE"
+        })),
+        sales: trashedSales.map(s => ({
+          id: s.id,
+          date: s.saleDate,
+          entity: s.customer?.name || "-",
+          amount: s.totalAmount,
+          deletedAt: s.deletedAt,
+          type: "SALE"
+        })),
+        production: trashedProduction.map(pr => ({
+          id: pr.id,
+          date: pr.productionDate,
+          entity: pr.outputItem?.name || "-",
+          amount: pr.outputQuantity,
+          deletedAt: pr.deletedAt,
+          type: "PRODUCTION"
+        }))
+      };
+
+      res.json(response);
+    } catch (err) {
+      handleDbError(err, res);
+    }
+  });
+
+  // 🔹 RESTORE FROM TRASH
+  app.post("/api/trash/restore/:type/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const type = req.params.type;
+
+      await db.transaction(async (tx) => {
+        if (type === "PURCHASE") {
+          const [purchase] = await tx.select().from(purchases).where(eq(purchases.id, id)).limit(1);
+          if (!purchase) throw new Error("Purchase not found");
+
+          await tx.update(purchases).set({ isDeleted: false, deletedAt: null }).where(eq(purchases.id, id));
+
+          const itemsRelated = await tx.select().from(purchaseItems).where(eq(purchaseItems.purchaseId, id));
+          for (const item of itemsRelated) {
+            await tx.insert(stockLedger).values({
+              itemId: item.itemId,
+              warehouseId: purchase.warehouseId,
+              quantity: String(item.quantity),
+              referenceType: "PURCHASE_RESTORE",
+              referenceId: id,
+            });
+          }
+        }
+        else if (type === "SALE") {
+          const [sale] = await tx.select().from(sales).where(eq(sales.id, id)).limit(1);
+          if (!sale) throw new Error("Sale not found");
+
+          await tx.update(sales).set({ isDeleted: false, deletedAt: null }).where(eq(sales.id, id));
+
+          const itemsRelated = await tx.select().from(salesItems).where(eq(salesItems.saleId, id));
+          for (const item of itemsRelated) {
+            await tx.insert(stockLedger).values({
+              itemId: item.itemId,
+              warehouseId: sale.warehouseId,
+              quantity: String(-Math.abs(Number(item.quantity))),
+              referenceType: "SALE_RESTORE",
+              referenceId: id,
+            });
+          }
+        }
+        else if (type === "PRODUCTION") {
+          const [run] = await tx.select().from(productionRuns).where(eq(productionRuns.id, id)).limit(1);
+          if (!run) throw new Error("Production run not found");
+
+          await tx.update(productionRuns).set({ isDeleted: false, deletedAt: null }).where(eq(productionRuns.id, id));
+
+          // 1. Finished Goods Restore
+          await tx.insert(stockLedger).values({
+            itemId: run.outputItemId,
+            warehouseId: run.warehouseId,
+            quantity: String(run.outputQuantity),
+            referenceType: "PRODUCTION_RESTORE",
+            referenceId: id,
+          });
+
+          // 2. Consumption Restore
+          const consumptions = await tx.select().from(productionConsumptions).where(eq(productionConsumptions.productionRunId, id));
+          for (const c of consumptions) {
+            await tx.insert(stockLedger).values({
+              itemId: c.itemId,
+              warehouseId: run.warehouseId,
+              quantity: String(-Math.abs(Number(c.actualQty))),
+              referenceType: "PRODUCTION_CONSUMPTION_RESTORE",
+              referenceId: id,
+            });
+          }
+        }
+      });
+
+      res.json({ message: "Successfully restored from trash" });
+    } catch (err: any) {
+      handleDbError(err, res);
+    }
+  });
+
+  // 🔹 PERMANENT DELETE FROM TRASH
+  app.delete("/api/trash/permanent/:type/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const type = req.params.type;
+
+      if (type === "PURCHASE") {
+        await db.delete(purchases).where(eq(purchases.id, id));
+      } else if (type === "SALE") {
+        await db.delete(sales).where(eq(sales.id, id));
+      } else if (type === "PRODUCTION") {
+        await db.delete(productionRuns).where(eq(productionRuns.id, id));
+      }
+
+      res.json({ message: "Permanently deleted from database" });
+    } catch (err) {
+      handleDbError(err, res);
+    }
+  });
 }
+
 

@@ -12,6 +12,7 @@ import {
   Package,
   Pencil,
   LogOut,
+  Trash2,
 } from "lucide-react";
 
 import { useAuth } from "@/hooks/use-auth";
@@ -185,6 +186,7 @@ export function SidebarContent({ onInteract }: { onInteract?: () => void }) {
           <SidebarItem href="/stock" icon={Package} label="Stock" />
           <SidebarItem href="/reports" icon={BarChart3} label="Reports" />
           <SidebarItem href="/backup" icon={Download} label="Backup" />
+          <SidebarItem href="/trash" icon={Trash2} label="Trash" />
         </div>
       </div>
 
