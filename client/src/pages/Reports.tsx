@@ -396,7 +396,7 @@ export default function Reports() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-6 mt-4">
-                  {stockReport?.slice(0, 5).map((item: any, idx: number) => (
+                  {stockReport?.map((item: any, idx: number) => (
                     <div key={idx} className="flex items-center justify-between group">
                       <div className="flex items-center gap-4">
                         <div className={`w-2 h-10 rounded-full bg-gradient-to-b from-blue-400 to-blue-600`} />

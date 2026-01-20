@@ -61,7 +61,8 @@ export async function registerRoutes(_server: any, app: Express) {
       req.path === "/api/login" ||
       req.path === "/api/user" ||
       req.path === "/api/logout" ||
-      req.path === "/api/admin") {
+      req.path === "/api/admin" ||
+      req.path.startsWith("/api/debug")) {
       return next();
     }
 

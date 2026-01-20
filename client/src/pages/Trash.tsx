@@ -85,7 +85,7 @@ export default function Trash() {
                     <Trash2 className="w-8 h-8 text-muted-foreground" />
                     Trash / Recycle Bin
                 </h1>
-                <p className="text-muted-foreground">Deleted transactions are kept here for 30 days. You can restore them or delete them permanently.</p>
+                <p className="text-muted-foreground">Deleted transactions are kept here. You can restore them or delete them permanently.</p>
             </div>
 
             <Card className="border-amber-200 bg-amber-50/30">

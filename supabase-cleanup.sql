@@ -5,24 +5,24 @@
 -- ============================================
 
 -- 1. Delete all stock ledger entries (this tracks all inventory movements)
-DELETE FROM stock_ledger;
+DELETE FROM "stockLedger";
 
 -- 2. Delete all production-related data
-DELETE FROM production_consumptions;
-DELETE FROM production_runs;
+DELETE FROM "productionConsumptions";
+DELETE FROM "productionRuns";
 
 -- 3. Delete all sales-related data
-DELETE FROM sales_items;
+DELETE FROM "salesItems";
 DELETE FROM sales;
-DELETE FROM customer_payments;
+DELETE FROM "customerPayments";
 
 -- 4. Delete all purchase-related data
-DELETE FROM purchase_items;
+DELETE FROM "purchaseItems";
 DELETE FROM purchases;
-DELETE FROM supplier_payments;
+DELETE FROM "supplierPayments";
 
 -- 5. Delete all stock transfers
-DELETE FROM stock_transfers;
+DELETE FROM "stockTransfers";
 
 -- 6. Reset sequences (optional - this resets auto-increment IDs to 1)
 -- Uncomment these if you want IDs to start from 1 again
@@ -37,15 +37,15 @@ DELETE FROM stock_transfers;
 -- ============================================
 
 -- Check counts (should all be 0)
-SELECT 'stock_ledger' as table_name, COUNT(*) as count FROM stock_ledger
+SELECT 'stockLedger' as table_name, COUNT(*) as count FROM "stockLedger"
 UNION ALL
-SELECT 'production_runs', COUNT(*) FROM production_runs
+SELECT 'productionRuns', COUNT(*) FROM "productionRuns"
 UNION ALL
 SELECT 'sales', COUNT(*) FROM sales
 UNION ALL
 SELECT 'purchases', COUNT(*) FROM purchases
 UNION ALL
-SELECT 'stock_transfers', COUNT(*) FROM stock_transfers;
+SELECT 'stockTransfers', COUNT(*) FROM "stockTransfers";
 
 -- ============================================
 -- MASTER DATA PRESERVED
