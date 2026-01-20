@@ -394,17 +394,17 @@ export default function Production() {
       const payload = {
         productionDate: productionDate,
         outputItemId: selectedBom.outputItemId,
-        outputQuantity: actualOutput,
+        outputQuantity: Number(actualOutput),
         warehouseId,
         consumptions: consumptions.map((r) => ({
           itemId: r.itemId,
-          standardQty: r.standardQty,
-          actualQty: r.actualQty,
-          opening: r.opening,
-          variance: r.variance,
+          standardQty: Number(Number(r.standardQty).toFixed(2)),
+          actualQty: Number(Number(r.actualQty).toFixed(2)),
+          opening: Number(Number(r.opening).toFixed(2)),
+          variance: Number(Number(r.variance).toFixed(2)),
           remarks: r.remarks,
         })),
-        batchCount: batches,
+        batchCount: Number(batches),
         remarks: remarks,
       };
 
@@ -426,33 +426,23 @@ export default function Production() {
   };
 
   const createProductionRun = () => {
-    console.log("Saving production with data:", {
-      productionDate: productionDate,
-      outputItemId: selectedBom.outputItemId,
-      outputQuantity: actualOutput,
-      warehouseId,
-      consumptions: consumptions.map((r) => ({
-        itemId: r.itemId,
-        standardQty: r.standardQty,
-        actualQty: r.actualQty,
-      })),
-    });
+    if (!selectedBom || !warehouseId) return;
 
     productionHook.create.mutate(
       {
         productionDate: productionDate,
         outputItemId: selectedBom.outputItemId,
-        outputQuantity: actualOutput,
+        outputQuantity: Number(actualOutput),
         warehouseId,
         consumptions: consumptions.map((r) => ({
           itemId: r.itemId,
-          standardQty: r.standardQty,
-          actualQty: r.actualQty,
-          opening: r.opening, // Send opening stock to backend
-          variance: r.variance, // Send variance for stock adjustment
+          standardQty: Number(Number(r.standardQty).toFixed(2)),
+          actualQty: Number(Number(r.actualQty).toFixed(2)),
+          opening: Number(Number(r.opening).toFixed(2)), // Send opening stock to backend
+          variance: Number(Number(r.variance).toFixed(2)), // Send variance for stock adjustment
           remarks: r.remarks, // Send remarks
         })),
-        batchCount: batches, // Send the batch count explicitely
+        batchCount: Number(batches), // Send the batch count explicitely
         remarks: remarks, // Send remarks
       },
       {

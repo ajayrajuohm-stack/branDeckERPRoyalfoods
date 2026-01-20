@@ -2984,7 +2984,7 @@ export async function registerRoutes(_server: any, app: Express) {
       res.json({ message: "Production run updated successfully" });
     } catch (err: any) {
       console.error("Production UPDATE error:", err);
-      res.status(err.message === "Production run not found" ? 404 : 500).json({ message: err.message });
+      handleDbError(err, res);
     }
   });
 
