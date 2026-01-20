@@ -322,6 +322,117 @@ export async function registerRoutes(_server: any, app: Express) {
     }
   });
 
+  // 🔹 REBUILD ENTIRE INVENTORY LEDGER (ULTIMATE FIX)
+  app.post("/api/debug/rebuild-inventory", async (_req, res) => {
+    try {
+      console.log("[REBUILD] Starting complete inventory ledger rebuild...");
+
+      await db.transaction(async (tx) => {
+        // 1. Wipe current ledger
+        await tx.delete(stockLedger);
+        console.log("[REBUILD] Wiped stock_ledger table.");
+
+        // 2. Re-insert from Purchases
+        const activePurchases = await tx.query.purchases.findMany({
+          where: eq(purchases.isDeleted, false),
+          with: { items: true }
+        });
+        for (const p of activePurchases) {
+          for (const item of p.items) {
+            await tx.insert(stockLedger).values({
+              itemId: item.itemId,
+              warehouseId: p.warehouseId,
+              quantity: String(item.quantity),
+              referenceType: "PURCHASE",
+              referenceId: p.id,
+              createdAt: new Date(p.purchaseDate)
+            });
+          }
+        }
+        console.log(`[REBUILD] Re-inserted ${activePurchases.length} active purchases.`);
+
+        // 3. Re-insert from Sales
+        const activeSales = await tx.query.sales.findMany({
+          where: eq(sales.isDeleted, false),
+          with: { items: true }
+        });
+        for (const s of activeSales) {
+          for (const item of s.items) {
+            await tx.insert(stockLedger).values({
+              itemId: item.itemId,
+              warehouseId: s.warehouseId,
+              quantity: String(-Math.abs(Number(item.quantity))),
+              referenceType: "SALE",
+              referenceId: s.id,
+              createdAt: new Date(s.saleDate)
+            });
+          }
+        }
+        console.log(`[REBUILD] Re-inserted ${activeSales.length} active sales.`);
+
+        // 4. Re-insert from Production
+        const activeProduction = await tx.query.productionRuns.findMany({
+          where: eq(productionRuns.isDeleted, false),
+          with: { consumptions: true }
+        });
+        for (const pr of activeProduction) {
+          // Output (FG)
+          await tx.insert(stockLedger).values({
+            itemId: pr.outputItemId,
+            warehouseId: pr.warehouseId,
+            quantity: String(pr.outputQuantity),
+            referenceType: "PRODUCTION",
+            referenceId: pr.id,
+            createdAt: new Date(pr.productionDate)
+          });
+          // Consumptions (Raw Materials)
+          for (const c of pr.consumptions) {
+            await tx.insert(stockLedger).values({
+              itemId: c.itemId,
+              warehouseId: pr.warehouseId,
+              quantity: String(-Math.abs(Number(c.actualQty))),
+              referenceType: "PRODUCTION_CONSUMPTION",
+              referenceId: pr.id,
+              createdAt: new Date(pr.productionDate)
+            });
+          }
+        }
+        console.log(`[REBUILD] Re-inserted ${activeProduction.length} active production runs.`);
+
+        // 5. Re-insert from Stock Transfers
+        const transfers = await tx.select().from(stockTransfers);
+        for (const t of transfers) {
+          // Outflow
+          await tx.insert(stockLedger).values({
+            itemId: t.itemId,
+            warehouseId: t.fromWarehouseId,
+            quantity: String(-Math.abs(Number(t.quantity))),
+            referenceType: "TRANSFER_OUT",
+            referenceId: t.id,
+            createdAt: new Date(t.transferDate)
+          });
+          // Inflow
+          if (t.toWarehouseId) {
+            await tx.insert(stockLedger).values({
+              itemId: t.itemId,
+              warehouseId: t.toWarehouseId,
+              quantity: String(Math.abs(Number(t.quantity))),
+              referenceType: "TRANSFER_IN",
+              referenceId: t.id,
+              createdAt: new Date(t.transferDate)
+            });
+          }
+        }
+        console.log(`[REBUILD] Re-inserted ${transfers.length} stock transfers.`);
+      });
+
+      res.json({ message: "Inventory ledger has been completely rebuilt from active transactions." });
+    } catch (err) {
+      console.error("[REBUILD] Error:", err);
+      handleDbError(err, res);
+    }
+  });
+
   /* =======================
      GENERIC LIST
   ======================= */
@@ -698,9 +809,9 @@ export async function registerRoutes(_server: any, app: Express) {
       }
 
       // 🔐 Check for dependent production runs
-      // If production was recorded after or on the same day as the purchase, 
-      // we should warn the user to delete production first.
       const itemIds = purchaseItemsData.map(i => i.itemId);
+      console.log(`[DELETE Purchase] ID: ${purchaseId}, Date: ${purchase.purchaseDate}, Item IDs: ${itemIds}`);
+
       if (itemIds.length > 0) {
         const dependentProduction = await db
           .select({
@@ -712,14 +823,17 @@ export async function registerRoutes(_server: any, app: Express) {
           .where(
             and(
               inArray(productionConsumptions.itemId, itemIds),
-              gte(productionRuns.productionDate, purchase.purchaseDate),
+              sql`CAST(${productionRuns.productionDate} AS DATE) >= CAST(${purchase.purchaseDate} AS DATE)`,
               eq(productionRuns.isDeleted, false)
             )
           )
           .limit(1);
 
+        console.log(`[DELETE Purchase] Dependent production found count: ${dependentProduction.length}`);
+
         if (dependentProduction.length > 0) {
           const formattedDate = format(new Date(dependentProduction[0].productionDate), "dd/MM/yyyy");
+          console.log(`[DELETE Purchase] Blocking deletion. Dependent run: ${dependentProduction[0].id} on ${formattedDate}`);
           return res.status(400).json({
             message: `Cannot delete purchase. Production order(s) (e.g., from ${formattedDate}) have been recorded after this purchase using these items. Please delete the associated production orders first to maintain stock integrity.`
           });
@@ -734,6 +848,7 @@ export async function registerRoutes(_server: any, app: Express) {
           quantity: String(-Math.abs(Number(item.quantity))), // Negative to subtract
           referenceType: "PURCHASE_REVERSAL",
           referenceId: purchaseId,
+          createdAt: new Date(purchase.purchaseDate), // 🎯 Backdate to original date
         });
       }
 
@@ -1049,6 +1164,7 @@ export async function registerRoutes(_server: any, app: Express) {
           quantity: String(Math.abs(Number(item.quantity))), // Positive to add back
           referenceType: "SALE_REVERSAL",
           referenceId: saleId,
+          createdAt: new Date(sale.saleDate), // 🎯 Backdate to original date
         });
       }
 
@@ -2011,7 +2127,10 @@ export async function registerRoutes(_server: any, app: Express) {
         openingStock = Number(openingStockData[0]?.totalQty || 0);
       }
 
-      const purchaseConditionsBase = [sql`CAST(${purchases.purchaseDate} AS DATE) = ${dateStr}`];
+      const purchaseConditionsBase = [
+        sql`CAST(${purchases.purchaseDate} AS DATE) = ${dateStr}`,
+        eq(purchases.isDeleted, false)
+      ];
       if (wId) purchaseConditionsBase.push(eq(purchases.warehouseId, wId));
 
       const purchaseData = await db
@@ -2022,7 +2141,10 @@ export async function registerRoutes(_server: any, app: Express) {
         .from(purchases)
         .where(and(...purchaseConditionsBase));
 
-      const salesConditionsBase = [sql`CAST(${sales.saleDate} AS DATE) = ${dateStr}`];
+      const salesConditionsBase = [
+        sql`CAST(${sales.saleDate} AS DATE) = ${dateStr}`,
+        eq(sales.isDeleted, false)
+      ];
       if (wId) salesConditionsBase.push(eq(sales.warehouseId, wId));
 
       const salesData = await db
@@ -2038,7 +2160,8 @@ export async function registerRoutes(_server: any, app: Express) {
       if (fgItemIds.length > 0) {
         const prodConditions = [
           sql`CAST(${productionRuns.productionDate} AS DATE) = ${dateStr}`,
-          inArray(productionRuns.outputItemId, fgItemIds)
+          inArray(productionRuns.outputItemId, fgItemIds),
+          eq(productionRuns.isDeleted, false)
         ];
         if (wId) prodConditions.push(eq(productionRuns.warehouseId, wId));
 
@@ -2064,7 +2187,10 @@ export async function registerRoutes(_server: any, app: Express) {
         }
       });
 
-      const detailedProdConditions = [sql`CAST(${productionRuns.productionDate} AS DATE) = ${dateStr}`];
+      const detailedProdConditions = [
+        sql`CAST(${productionRuns.productionDate} AS DATE) = ${dateStr}`,
+        eq(productionRuns.isDeleted, false)
+      ];
       if (wId) detailedProdConditions.push(eq(productionRuns.warehouseId, wId));
 
       const detailedProduction = await db.query.productionRuns.findMany({
@@ -2102,7 +2228,10 @@ export async function registerRoutes(_server: any, app: Express) {
           })
           .from(salesItems)
           .innerJoin(sales, eq(salesItems.saleId, sales.id))
-          .where(and(...soldQtyConditions));
+          .where(and(
+            ...soldQtyConditions,
+            eq(sales.isDeleted, false)
+          ));
         totalSoldFGQty = Number(totalSoldFGQtyResult[0]?.total || 0);
       }
 
@@ -2110,7 +2239,7 @@ export async function registerRoutes(_server: any, app: Express) {
       if (fgItemIds.length > 0) {
         const closingConditions = [
           sql`CAST(${stockLedger.createdAt} AS DATE) <= ${dateStr}`,
-          inArray(stockLedger.itemId, fgItemIds)
+          inArray(stockLedger.itemId, fgItemIds) // 🎯 CRITICAL: Only filter by FG items!
         ];
         if (wId) closingConditions.push(eq(stockLedger.warehouseId, wId));
 
@@ -2120,6 +2249,7 @@ export async function registerRoutes(_server: any, app: Express) {
           })
           .from(stockLedger)
           .where(and(...closingConditions));
+
         closingFGStock = Number(closingFGStockResult[0]?.total || 0);
       }
 
@@ -2929,7 +3059,7 @@ export async function registerRoutes(_server: any, app: Express) {
             quantity: String(-Number(entry.quantity)),
             referenceType: "PRODUCTION_REVERSAL",
             referenceId: runId,
-            createdAt: entry.createdAt,
+            createdAt: new Date(run.productionDate), // 🎯 Backdate to original date
           });
         }
 
@@ -3251,16 +3381,174 @@ export async function registerRoutes(_server: any, app: Express) {
       const id = parseInt(req.params.id);
       const type = req.params.type;
 
-      if (type === "PURCHASE") {
-        await db.delete(purchases).where(eq(purchases.id, id));
-      } else if (type === "SALE") {
-        await db.delete(sales).where(eq(sales.id, id));
-      } else if (type === "PRODUCTION") {
-        await db.delete(productionRuns).where(eq(productionRuns.id, id));
+      await db.transaction(async (tx) => {
+        if (type === "PURCHASE") {
+          await tx.delete(stockLedger).where(eq(stockLedger.referenceId, id)).where(sql`${stockLedger.referenceType} LIKE 'PURCHASE%'`);
+          await tx.delete(purchases).where(eq(purchases.id, id));
+        } else if (type === "SALE") {
+          await tx.delete(stockLedger).where(eq(stockLedger.referenceId, id)).where(sql`${stockLedger.referenceType} LIKE 'SALE%'`);
+          await tx.delete(sales).where(eq(sales.id, id));
+        } else if (type === "PRODUCTION") {
+          await tx.delete(stockLedger).where(eq(stockLedger.referenceId, id)).where(sql`${stockLedger.referenceType} LIKE 'PRODUCTION%'`);
+          await tx.delete(productionRuns).where(eq(productionRuns.id, id));
+        }
+      });
+
+      res.json({ message: "Permanently deleted and history cleaned" });
+    } catch (err) {
+      handleDbError(err, res);
+    }
+  });
+
+  // 🔹 ONE-TIME FIX FOR LEDGER DATES
+  app.get("/api/admin/fix-ledger-dates", async (_req, res) => {
+    try {
+      console.log("[FIX] Starting stock ledger date fix...");
+      let fixedCount = 0;
+
+      // 1. Fix Purchase Reversals
+      const pReversals = await db.select().from(stockLedger).where(eq(stockLedger.referenceType, "PURCHASE_REVERSAL"));
+      for (const rev of pReversals) {
+        const [p] = await db.select().from(purchases).where(eq(purchases.id, rev.referenceId)).limit(1);
+        if (p) {
+          await db.update(stockLedger).set({ createdAt: new Date(p.purchaseDate) }).where(eq(stockLedger.id, rev.id));
+          fixedCount++;
+        }
       }
 
-      res.json({ message: "Permanently deleted from database" });
+      // 2. Fix Sale Reversals
+      const sReversals = await db.select().from(stockLedger).where(eq(stockLedger.referenceType, "SALE_REVERSAL"));
+      for (const rev of sReversals) {
+        const [s] = await db.select().from(sales).where(eq(sales.id, rev.referenceId)).limit(1);
+        if (s) {
+          await db.update(stockLedger).set({ createdAt: new Date(s.saleDate) }).where(eq(stockLedger.id, rev.id));
+          fixedCount++;
+        }
+      }
+
+      // 3. Fix Production Reversals
+      const prReversals = await db.select().from(stockLedger).where(eq(stockLedger.referenceType, "PRODUCTION_REVERSAL"));
+      for (const rev of prReversals) {
+        const [pr] = await db.select().from(productionRuns).where(eq(productionRuns.id, rev.referenceId)).limit(1);
+        if (pr) {
+          await db.update(stockLedger).set({ createdAt: new Date(pr.productionDate) }).where(eq(stockLedger.id, rev.id));
+          fixedCount++;
+        }
+      }
+
+      res.json({ message: `Successfully fixed ${fixedCount} ledger entries. Opening balance should now be correct.` });
     } catch (err) {
+      handleDbError(err, res);
+    }
+  });
+
+  // 🔹 REBUILD ENTIRE INVENTORY LEDGER (ULTIMATE FIX)
+  app.post("/api/admin/rebuild-inventory", async (_req, res) => {
+    try {
+      console.log("[REBUILD] Starting complete inventory ledger rebuild...");
+
+      await db.transaction(async (tx) => {
+        // 1. Wipe current ledger
+        await tx.delete(stockLedger);
+        console.log("[REBUILD] Wiped stock_ledger table.");
+
+        // 2. Re-insert from Purchases
+        const activePurchases = await tx.query.purchases.findMany({
+          where: eq(purchases.isDeleted, false),
+          with: { items: true }
+        });
+        for (const p of activePurchases) {
+          for (const item of p.items) {
+            await tx.insert(stockLedger).values({
+              itemId: item.itemId,
+              warehouseId: p.warehouseId,
+              quantity: String(item.quantity),
+              referenceType: "PURCHASE",
+              referenceId: p.id,
+              createdAt: new Date(p.purchaseDate)
+            });
+          }
+        }
+        console.log(`[REBUILD] Re-inserted ${activePurchases.length} active purchases.`);
+
+        // 3. Re-insert from Sales
+        const activeSales = await tx.query.sales.findMany({
+          where: eq(sales.isDeleted, false),
+          with: { items: true }
+        });
+        for (const s of activeSales) {
+          for (const item of s.items) {
+            await tx.insert(stockLedger).values({
+              itemId: item.itemId,
+              warehouseId: s.warehouseId,
+              quantity: String(-Math.abs(Number(item.quantity))),
+              referenceType: "SALE",
+              referenceId: s.id,
+              createdAt: new Date(s.saleDate)
+            });
+          }
+        }
+        console.log(`[REBUILD] Re-inserted ${activeSales.length} active sales.`);
+
+        // 4. Re-insert from Production
+        const activeProduction = await tx.query.productionRuns.findMany({
+          where: eq(productionRuns.isDeleted, false),
+          with: { consumptions: true }
+        });
+        for (const pr of activeProduction) {
+          // Output (FG)
+          await tx.insert(stockLedger).values({
+            itemId: pr.outputItemId,
+            warehouseId: pr.warehouseId,
+            quantity: String(pr.outputQuantity),
+            referenceType: "PRODUCTION",
+            referenceId: pr.id,
+            createdAt: new Date(pr.productionDate)
+          });
+          // Consumptions (Raw Materials)
+          for (const c of pr.consumptions) {
+            await tx.insert(stockLedger).values({
+              itemId: c.itemId,
+              warehouseId: pr.warehouseId,
+              quantity: String(-Math.abs(Number(c.actualQty))),
+              referenceType: "PRODUCTION_CONSUMPTION",
+              referenceId: pr.id,
+              createdAt: new Date(pr.productionDate)
+            });
+          }
+        }
+        console.log(`[REBUILD] Re-inserted ${activeProduction.length} active production runs.`);
+
+        // 5. Re-insert from Stock Transfers
+        const transfers = await tx.select().from(stockTransfers);
+        for (const t of transfers) {
+          // Outflow
+          await tx.insert(stockLedger).values({
+            itemId: t.itemId,
+            warehouseId: t.fromWarehouseId,
+            quantity: String(-Math.abs(Number(t.quantity))),
+            referenceType: "TRANSFER_OUT",
+            referenceId: t.id,
+            createdAt: new Date(t.transferDate)
+          });
+          // Inflow
+          if (t.toWarehouseId) {
+            await tx.insert(stockLedger).values({
+              itemId: t.itemId,
+              warehouseId: t.toWarehouseId,
+              quantity: String(Math.abs(Number(t.quantity))),
+              referenceType: "TRANSFER_IN",
+              referenceId: t.id,
+              createdAt: new Date(t.transferDate)
+            });
+          }
+        }
+        console.log(`[REBUILD] Re-inserted ${transfers.length} stock transfers.`);
+      });
+
+      res.json({ message: "Inventory ledger has been completely rebuilt from active transactions." });
+    } catch (err) {
+      console.error("[REBUILD] Error:", err);
       handleDbError(err, res);
     }
   });

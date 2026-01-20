@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { useStockReport, useWarehouses, useCategories, useDashboardStats } from "@/hooks/use-erp";
+import { useStockReport, useWarehouses, useCategories, useDashboardStats, useRebuildInventory } from "@/hooks/use-erp";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Package, Warehouse, Search, AlertTriangle, CheckCircle, Download, X } from "lucide-react";
+import { Package, Warehouse, Search, AlertTriangle, CheckCircle, Download, X, RefreshCw } from "lucide-react";
 import { exportToExcel, formatStockForExport, stockColumns } from "@/lib/excel-export";
 
 export default function Stock() {
@@ -18,6 +18,13 @@ export default function Stock() {
   const { data: warehouses } = useWarehouses().list;
   const { data: categories } = useCategories().list;
   const { data: dashboardStats } = useDashboardStats();
+  const rebuildInventory = useRebuildInventory();
+
+  const handleRebuild = () => {
+    if (confirm("This will recalculate your entire inventory ledger from all active transactions. Use this to fix stock discrepancies. Proceed?")) {
+      rebuildInventory.mutate();
+    }
+  };
 
   const filteredStock = stock?.filter((item: any) => {
     const matchesSearch = item.itemName.toLowerCase().includes(search.toLowerCase()) ||
@@ -190,6 +197,15 @@ export default function Stock() {
                   ))}
                 </SelectContent>
               </Select>
+              <Button
+                variant="outline"
+                onClick={handleRebuild}
+                disabled={rebuildInventory.isPending}
+                className="text-amber-600 border-amber-200 hover:bg-amber-50"
+              >
+                <RefreshCw className={`w-4 h-4 mr-2 ${rebuildInventory.isPending ? 'animate-spin' : ''}`} />
+                Sync Inventory
+              </Button>
               <Button variant="outline" onClick={handleExportStock} disabled={!filteredStock?.length} data-testid="button-export-stock">
                 <Download className="w-4 h-4 mr-2" /> Export
               </Button>

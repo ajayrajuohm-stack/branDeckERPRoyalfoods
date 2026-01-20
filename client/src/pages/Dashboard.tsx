@@ -1,5 +1,12 @@
 import { useState } from "react";
-import { useDetailedDashboard } from "@/hooks/use-erp";
+import { useDetailedDashboard, useWarehouses } from "@/hooks/use-erp";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import {
   Package,
@@ -59,7 +66,14 @@ function StatCard({
 export default function Dashboard() {
   const { toast } = useToast();
   const [selectedDate, setSelectedDate] = useState(format(new Date(), "yyyy-MM-dd"));
-  const { data: stats, isLoading: statsLoading } = useDetailedDashboard(selectedDate);
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>("all");
+
+  const { data: warehouseList } = useWarehouses().list;
+
+  const { data: stats, isLoading: statsLoading } = useDetailedDashboard(
+    selectedDate,
+    selectedWarehouseId === "all" ? undefined : selectedWarehouseId
+  );
 
   const handleExportExcel = async () => {
     if (!stats) return;
@@ -395,13 +409,27 @@ export default function Dashboard() {
           <p className="text-muted-foreground">Daily activity and inventory tracking</p>
         </div>
 
-        <div className="flex items-center gap-4 bg-card p-3 rounded-xl border shadow-sm">
+        {/* Filters styled like Reports page */}
+        <div className="flex gap-2 items-center bg-muted/30 p-2 rounded-lg border">
+          <Select value={selectedWarehouseId} onValueChange={setSelectedWarehouseId}>
+            <SelectTrigger className="w-[180px] bg-background">
+              <SelectValue placeholder="All Warehouses" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Warehouses</SelectItem>
+              {Array.isArray(warehouseList) && warehouseList.map((w: any) => (
+                <SelectItem key={w.id} value={String(w.id)}>{w.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
           <Input
             type="date"
             value={selectedDate}
             onChange={(e) => setSelectedDate(e.target.value)}
-            className="w-40 border-none bg-transparent focus-visible:ring-0 font-medium"
+            className="w-auto bg-background"
           />
+
           <Button size="sm" onClick={handleExportExcel} disabled={statsLoading}>
             <Download className="w-4 h-4 mr-2" />
             Export Data

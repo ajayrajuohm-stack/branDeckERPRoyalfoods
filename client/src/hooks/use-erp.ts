@@ -954,3 +954,25 @@ export const useTrash = () => {
 
   return { list, restore, permanentDelete };
 };
+
+export const useRebuildInventory = () => {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/debug/rebuild-inventory", { method: "POST" });
+      if (!res.ok) throw new Error("Rebuild failed");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/reports/stock"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/reports/dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/reports/detailed-dashboard"] });
+      toast({ title: "Success", description: data.message });
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+  });
+};
