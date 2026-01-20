@@ -3032,6 +3032,34 @@ export async function registerRoutes(_server: any, app: Express) {
 
         const run = found[0];
 
+        // 🔐 Check for dependent sales (items from this production that have been sold)
+        console.log(`[DELETE Production] ID: ${runId}, Date: ${run.productionDate}, Output Item: ${run.outputItemId}`);
+
+        const dependentSales = await tx
+          .select({
+            id: sales.id,
+            saleDate: sales.saleDate,
+          })
+          .from(sales)
+          .innerJoin(salesItems, eq(sales.id, salesItems.saleId))
+          .where(
+            and(
+              eq(salesItems.itemId, run.outputItemId),
+              sql`CAST(${sales.saleDate} AS DATE) >= CAST(${run.productionDate} AS DATE)`,
+              eq(sales.isDeleted, false)
+            )
+          )
+          .limit(1);
+
+        console.log(`[DELETE Production] Dependent sales found count: ${dependentSales.length}`);
+
+        if (dependentSales.length > 0) {
+          const formattedDate = format(new Date(dependentSales[0].saleDate), "dd/MM/yyyy");
+          console.log(`[DELETE Production] Blocking deletion. Dependent sale: ${dependentSales[0].id} on ${formattedDate}`);
+          throw new Error(
+            `Cannot delete production order. Sale(s) (e.g., from ${formattedDate}) have been recorded after this production using the produced items. Please delete the associated sales first to maintain stock integrity.`
+          );
+        }
 
         // 2. Reverse stock ledger entries
         // IMPORTANT: Only reverse original PRODUCTION/CONSUMPTION entries, 
