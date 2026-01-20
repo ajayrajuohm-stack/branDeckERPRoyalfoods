@@ -3111,29 +3111,43 @@ export async function registerRoutes(_server: any, app: Express) {
       const allLedgerEntries = await db.select().from(stockLedger);
       let deletedCount = 0;
 
+      // Bulk fetch existing IDs to minimize database hits
+      const [pIds, sIds, prIds, stIds] = await Promise.all([
+        db.select({ id: purchases.id }).from(purchases),
+        db.select({ id: sales.id }).from(sales),
+        db.select({ id: productionRuns.id }).from(productionRuns),
+        db.select({ id: stockTransfers.id }).from(stockTransfers)
+      ]);
+
+      const purchaseIds = new Set(pIds.map(o => o.id));
+      const saleIds = new Set(sIds.map(o => o.id));
+      const prodIds = new Set(prIds.map(o => o.id));
+      const transferIds = new Set(stIds.map(o => o.id));
+
       for (const entry of allLedgerEntries) {
         let parentExists = true;
+        const refId = Number(entry.referenceId);
 
-        // Only check entries with common transaction reference types
-        if (entry.referenceType && (entry.referenceType.startsWith("PURCHASE") || entry.referenceType === "PURCHASE_REVERSAL")) {
-          const [p] = await db.select().from(purchases).where(eq(purchases.id, entry.referenceId)).limit(1);
-          if (!p) parentExists = false;
+        // If ID is missing or 0, it might be an opening stock or direct entry - KEEP IT
+        if (!refId || isNaN(refId)) continue;
+
+        const type = entry.referenceType || "";
+
+        if (type.startsWith("PURCHASE")) {
+          if (!purchaseIds.has(refId)) parentExists = false;
         }
-        else if (entry.referenceType && (entry.referenceType.startsWith("SALE") || entry.referenceType === "SALE_REVERSAL")) {
-          const [s] = await db.select().from(sales).where(eq(sales.id, entry.referenceId)).limit(1);
-          if (!s) parentExists = false;
+        else if (type.startsWith("SALE")) {
+          if (!saleIds.has(refId)) parentExists = false;
         }
-        else if (entry.referenceType && (entry.referenceType.startsWith("PRODUCTION") || entry.referenceType === "PRODUCTION_REVERSAL")) {
-          const [pr] = await db.select().from(productionRuns).where(eq(productionRuns.id, entry.referenceId)).limit(1);
-          if (!pr) parentExists = false;
+        else if (type.startsWith("PRODUCTION")) {
+          if (!prodIds.has(refId)) parentExists = false;
         }
-        else if (entry.referenceType && (entry.referenceType.startsWith("TRANSFER") || entry.referenceType.startsWith("TRANSFER_REV"))) {
-          const [st] = await db.select().from(stockTransfers).where(eq(stockTransfers.id, entry.referenceId)).limit(1);
-          if (!st) parentExists = false;
+        else if (type.startsWith("TRANSFER")) {
+          if (!transferIds.has(refId)) parentExists = false;
         }
 
         if (!parentExists) {
-          console.log(`[RECONCILE] Deleting orphaned entry ${entry.id} (Type: ${entry.referenceType}, RefID: ${entry.referenceId})`);
+          console.log(`[RECONCILE] Deleting orphaned entry ${entry.id} (Type: ${type}, RefID: ${refId})`);
           await db.delete(stockLedger).where(eq(stockLedger.id, entry.id));
           deletedCount++;
         }
@@ -3141,12 +3155,9 @@ export async function registerRoutes(_server: any, app: Express) {
 
       console.log(`[RECONCILE] Completed. Deleted ${deletedCount} orphaned entries.`);
       res.json({ message: `Reconciliation complete. Removed ${deletedCount} orphaned records.`, deletedCount });
-    } catch (err) {
+    } catch (err: any) {
       console.error("[RECONCILE] Error:", err);
-      handleDbError(err, res);
+      res.status(500).json({ message: err.message || "Reconciliation failed" });
     }
   });
-
-
 }
-
