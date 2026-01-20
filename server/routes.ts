@@ -1860,6 +1860,35 @@ export async function registerRoutes(_server: any, app: Express) {
     }
   });
 
+  // Stock Audit Trail for specific item
+  app.get("/api/reports/stock-ledger/:itemId", async (req, res) => {
+    try {
+      const itemId = parseInt(req.params.itemId);
+      const warehouseId = req.query.warehouseId ? parseInt(req.query.warehouseId as string) : undefined;
+
+      const conditions = [eq(stockLedger.itemId, itemId)];
+      if (warehouseId) conditions.push(eq(stockLedger.warehouseId, warehouseId));
+
+      const history = await db
+        .select({
+          id: stockLedger.id,
+          quantity: stockLedger.quantity,
+          referenceType: stockLedger.referenceType,
+          referenceId: stockLedger.referenceId,
+          createdAt: stockLedger.createdAt,
+          warehouseName: warehouses.name,
+        })
+        .from(stockLedger)
+        .leftJoin(warehouses, eq(stockLedger.warehouseId, warehouses.id))
+        .where(and(...conditions))
+        .orderBy(desc(stockLedger.createdAt));
+
+      res.json(history);
+    } catch (err) {
+      handleDbError(err, res);
+    }
+  });
+
   // Sales Trend Report
   app.get("/api/reports/sales-trend", async (req, res) => {
     try {

@@ -943,3 +943,16 @@ export const useReconcileStock = () => {
     },
   });
 };
+
+export const useStockLedger = (itemId?: number, warehouseId?: number) =>
+  useQuery({
+    queryKey: ["/api/reports/stock-ledger", itemId, warehouseId],
+    queryFn: async () => {
+      if (!itemId) return [];
+      const url = `/api/reports/stock-ledger/${itemId}${warehouseId ? `?warehouseId=${warehouseId}` : ""}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("Failed to load audit trail");
+      return normalizeList(await res.json());
+    },
+    enabled: !!itemId,
+  });
