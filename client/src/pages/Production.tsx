@@ -332,10 +332,11 @@ export default function Production() {
      DELETE PRODUCTION RUN
   ====================== */
   const handleDelete = (id: number) => {
-    if (confirm("Are you sure you want to delete this production run? Stock will be reversed.")) {
+    if (confirm(`Are you sure you want to delete production run #${id}? Stock will be reversed.`)) {
       productionHook.remove.mutate(id);
     }
   };
+
 
   /* =====================
      CANCEL EDIT

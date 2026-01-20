@@ -2846,17 +2846,26 @@ export async function registerRoutes(_server: any, app: Express) {
         return res.status(400).json({ message: "Invalid production run ID" });
       }
 
+      console.log(`[DELETE] Received request to delete production run ID: ${runId}`);
+
       await db.transaction(async (tx) => {
         // 1. Get production run details
-        const [run] = await tx
+        const found = await tx
           .select()
           .from(productionRuns)
-          .where(eq(productionRuns.id, runId))
-          .limit(1);
+          .where(eq(productionRuns.id, runId));
 
-        if (!run) {
+        console.log(`[DELETE] Step 1: Found ${found.length} records in database for ID ${runId}`);
+
+        if (found.length === 0) {
+          // Also try to check if it exists in db without transaction to be sure
+          const globalFound = await db.select().from(productionRuns).where(eq(productionRuns.id, runId));
+          console.log(`[DELETE] Global check: Found ${globalFound.length} records outside transaction`);
           throw new Error("Production run not found");
         }
+
+        const run = found[0];
+
 
         // 2. Reverse stock ledger entries
         // IMPORTANT: Only reverse original PRODUCTION/CONSUMPTION entries, 

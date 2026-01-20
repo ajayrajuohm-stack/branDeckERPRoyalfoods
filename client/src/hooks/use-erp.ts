@@ -358,9 +358,11 @@ export const useProduction = () => {
 
   const remove = useMutation({
     mutationFn: async (id: number) => {
+      console.log(`Attempting to delete production run ID: ${id}`);
       const res = await fetch(`/api/production/${id}`, {
         method: "DELETE",
       });
+
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({ message: "Failed to delete Production Run" }));
         throw new Error(errorData.message || "Failed to delete Production Run");
