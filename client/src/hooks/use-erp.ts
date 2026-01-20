@@ -156,14 +156,36 @@ export const usePurchases = () => {
       }
       return res.json().catch(() => ({}));
     },
+    // 🚀 OPTIMISTIC UPDATE: Remove from UI immediately
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: ["/api/purchases"] });
+      const previous = queryClient.getQueryData(["/api/purchases"]);
+
+      queryClient.setQueryData(["/api/purchases"], (old: any) => {
+        if (!old) return old;
+        if (Array.isArray(old)) return old.filter((item: any) => item.id !== id);
+        if (old.data) return { ...old, data: old.data.filter((item: any) => item.id !== id) };
+        return old;
+      });
+
+      return { previous };
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/purchases"] });
       queryClient.invalidateQueries({ queryKey: ["/api/reports/supplier-payments"] });
       queryClient.invalidateQueries({ queryKey: ["/api/reports/overdue-payments"] });
       queryClient.invalidateQueries({ queryKey: ["/api/vendor-summary"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/reports/stock"] });
       toast({ title: "Success", description: "Purchase deleted" });
     },
-    onError: (error: Error) => {
+    onError: (error: Error, id, context: any) => {
+      if (error.message.toLowerCase().includes("not found")) {
+        queryClient.invalidateQueries({ queryKey: ["/api/purchases"] });
+        return;
+      }
+      if (context?.previous) {
+        queryClient.setQueryData(["/api/purchases"], context.previous);
+      }
       toast({
         title: "Error",
         description: error.message || "Failed to delete Purchase",
@@ -222,14 +244,36 @@ export const useSales = () => {
       }
       return res.json().catch(() => ({}));
     },
+    // 🚀 OPTIMISTIC UPDATE: Remove from UI immediately
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: ["/api/sales"] });
+      const previous = queryClient.getQueryData(["/api/sales"]);
+
+      queryClient.setQueryData(["/api/sales"], (old: any) => {
+        if (!old) return old;
+        if (Array.isArray(old)) return old.filter((item: any) => item.id !== id);
+        if (old.data) return { ...old, data: old.data.filter((item: any) => item.id !== id) };
+        return old;
+      });
+
+      return { previous };
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/sales"] });
       queryClient.invalidateQueries({ queryKey: ["/api/reports/customer-sales"] });
       queryClient.invalidateQueries({ queryKey: ["/api/reports/overdue-sales"] });
       queryClient.invalidateQueries({ queryKey: ["/api/customer-summary"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/reports/stock"] });
       toast({ title: "Success", description: "Sale deleted" });
     },
-    onError: (error: Error) => {
+    onError: (error: Error, id, context: any) => {
+      if (error.message.toLowerCase().includes("not found")) {
+        queryClient.invalidateQueries({ queryKey: ["/api/sales"] });
+        return;
+      }
+      if (context?.previous) {
+        queryClient.setQueryData(["/api/sales"], context.previous);
+      }
       toast({
         title: "Error",
         description: error.message || "Failed to delete Sale",
@@ -358,7 +402,6 @@ export const useProduction = () => {
 
   const remove = useMutation({
     mutationFn: async (id: number) => {
-      console.log(`Attempting to delete production run ID: ${id}`);
       const res = await fetch(`/api/production/${id}`, {
         method: "DELETE",
       });
@@ -369,14 +412,41 @@ export const useProduction = () => {
       }
       return res.json().catch(() => ({}));
     },
+    // 🚀 OPTIMISTIC UPDATE: Remove from UI immediately
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: ["/api/production"] });
+      const previousRuns = queryClient.getQueryData(["/api/production"]);
+
+      queryClient.setQueryData(["/api/production"], (old: any) => {
+        if (!old) return old;
+        // Handle both Array and {data: Array} formats
+        if (Array.isArray(old)) return old.filter((run: any) => run.id !== id);
+        if (old.data) return { ...old, data: old.data.filter((run: any) => run.id !== id) };
+        return old;
+      });
+
+      return { previousRuns };
+    },
     onSuccess: () => {
+      // Invalidate all related data to ensure stock levels are correct
       queryClient.invalidateQueries({ queryKey: ["/api/production"] });
       queryClient.invalidateQueries({ queryKey: ["/api/reports/stock"] });
       queryClient.invalidateQueries({ queryKey: ["/api/reports/dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["/api/reports/detailed-dashboard"] });
       toast({ title: "Success", description: "Production Run deleted" });
     },
-    onError: (error: Error) => {
+    onError: (error: Error, id, context: any) => {
+      // 🛡️ SILENT RECOVERY: If it's already "Not Found", it's effectively deleted!
+      if (error.message.includes("not found")) {
+        queryClient.invalidateQueries({ queryKey: ["/api/production"] });
+        return;
+      }
+
+      // Rollback if it was a real error
+      if (context?.previousRuns) {
+        queryClient.setQueryData(["/api/production"], context.previousRuns);
+      }
+
       toast({
         title: "Error",
         description: error.message || "Failed to delete Production Run",
@@ -384,6 +454,7 @@ export const useProduction = () => {
       });
     },
   });
+
 
   return { ...result, create, update, remove };
 
