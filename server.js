@@ -10,8 +10,11 @@ console.log('🚀 Starting Royal Foods ERP (Hostinger Resilient Mode)...');
 
 // Try to fix permissions before starting
 try {
-    spawn('chmod', ['+x', tsxPath], { stdio: 'ignore' });
-} catch (e) { }
+    console.log('Attemping to set permissions for tsx...');
+    spawn('chmod', ['+x', tsxPath], { stdio: 'inherit', shell: true });
+} catch (e) {
+    console.error('Failed to set permissions:', e);
+}
 
 // Use a function to start the process
 function startServer(command, args) {
