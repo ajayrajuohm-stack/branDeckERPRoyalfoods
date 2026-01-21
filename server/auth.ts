@@ -4,11 +4,11 @@ import session from "express-session";
 import express, { type Express } from "express";
 import { scryptSync, randomBytes, timingSafeEqual } from "crypto";
 import { users, type User } from "@shared/schema";
-import { db } from "./db";
+import { db, pool } from "./db";
 import { eq } from "drizzle-orm";
-import MemoryStore from "memorystore";
+import connectPg from "connect-pg-simple";
 
-const SessionStore = MemoryStore(session);
+const PostgresSessionStore = connectPg(session);
 
 async function hashPassword(password: string) {
     const salt = randomBytes(16).toString("hex");
@@ -28,8 +28,9 @@ export function setupAuth(app: Express) {
         secret: process.env.SESSION_SECRET || "erp-secret-key",
         resave: false,
         saveUninitialized: false,
-        store: new SessionStore({
-            checkPeriod: 86400000, // prune expired entries every 24h
+        store: new PostgresSessionStore({
+            pool,
+            createTableIfMissing: true,
         }),
         cookie: {
             secure: process.env.NODE_ENV === "production",
