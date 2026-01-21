@@ -1,14 +1,13 @@
 import {
-  pgTable,
-  text,
-  serial,
-  integer,
+  mysqlTable,
+  varchar,
+  int,
   boolean,
   timestamp,
-  numeric,
+  decimal,
   date,
   uniqueIndex,
-} from "drizzle-orm/pg-core";
+} from "drizzle-orm/mysql-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -17,10 +16,10 @@ import { z } from "zod";
    AUTHENTICATION
 ======================= */
 
-export const users = pgTable("users", {
-  id: serial("id").primaryKey(),
-  username: text("username").notNull().unique(),
-  password: text("password").notNull(),
+export const users = mysqlTable("users", {
+  id: int("id").primaryKey().autoincrement(),
+  username: varchar("username", { length: 255 }).notNull().unique(),
+  password: varchar("password", { length: 255 }).notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -36,79 +35,79 @@ export type InsertUser = z.infer<typeof insertUserSchema>;
    MASTERS
 ======================= */
 
-export const unitsOfMeasure = pgTable("units_of_measure", {
-  id: serial("id").primaryKey(),
-  name: text("name").notNull().unique(),
+export const unitsOfMeasure = mysqlTable("units_of_measure", {
+  id: int("id").primaryKey().autoincrement(),
+  name: varchar("name", { length: 255 }).notNull().unique(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const warehouses = pgTable("warehouses", {
-  id: serial("id").primaryKey(),
-  name: text("name").notNull().unique(),
+export const warehouses = mysqlTable("warehouses", {
+  id: int("id").primaryKey().autoincrement(),
+  name: varchar("name", { length: 255 }).notNull().unique(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const categories = pgTable("categories", {
-  id: serial("id").primaryKey(),
-  name: text("name").notNull().unique(),
-  type: text("type").notNull().default("RAW"),
+export const categories = mysqlTable("categories", {
+  id: int("id").primaryKey().autoincrement(),
+  name: varchar("name", { length: 255 }).notNull().unique(),
+  type: varchar("type", { length: 255 }).notNull().default("RAW"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const suppliers = pgTable("suppliers", {
-  id: serial("id").primaryKey(),
-  name: text("name").notNull().unique(),
-  personName: text("person_name"),
-  contactInfo: text("contact_info"),
-  address: text("address"),
-  gstNumber: text("gst_number"),
+export const suppliers = mysqlTable("suppliers", {
+  id: int("id").primaryKey().autoincrement(),
+  name: varchar("name", { length: 255 }).notNull().unique(),
+  personName: varchar("person_name", { length: 255 }),
+  contactInfo: varchar("contact_info", { length: 255 }),
+  address: varchar("address", { length: 255 }),
+  gstNumber: varchar("gst_number", { length: 255 }),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const customers = pgTable("customers", {
-  id: serial("id").primaryKey(),
-  name: text("name").notNull().unique(),
-  contactPerson: text("contact_person"),
-  contactInfo: text("contact_info"),
-  address: text("address"),
-  shippingAddress: text("shipping_address"),
-  gstNumber: text("gst_number"),
+export const customers = mysqlTable("customers", {
+  id: int("id").primaryKey().autoincrement(),
+  name: varchar("name", { length: 255 }).notNull().unique(),
+  contactPerson: varchar("contact_person", { length: 255 }),
+  contactInfo: varchar("contact_info", { length: 255 }),
+  address: varchar("address", { length: 255 }),
+  shippingAddress: varchar("shipping_address", { length: 255 }),
+  gstNumber: varchar("gst_number", { length: 255 }),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const expenseHeads = pgTable("expense_heads", {
-  id: serial("id").primaryKey(),
-  name: text("name").notNull().unique(),
+export const expenseHeads = mysqlTable("expense_heads", {
+  id: int("id").primaryKey().autoincrement(),
+  name: varchar("name", { length: 255 }).notNull().unique(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const owners = pgTable("owners", {
-  id: serial("id").primaryKey(),
-  name: text("name").notNull().unique(),
-  defaultSharePercentage: numeric("default_share_percentage").notNull(),
+export const owners = mysqlTable("owners", {
+  id: int("id").primaryKey().autoincrement(),
+  name: varchar("name", { length: 255 }).notNull().unique(),
+  defaultSharePercentage: decimal("default_share_percentage", { precision: 10, scale: 2 }).notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const paymentMethods = pgTable("payment_methods", {
-  id: serial("id").primaryKey(),
-  name: text("name").notNull().unique(),
+export const paymentMethods = mysqlTable("payment_methods", {
+  id: int("id").primaryKey().autoincrement(),
+  name: varchar("name", { length: 255 }).notNull().unique(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const items = pgTable(
+export const items = mysqlTable(
   "items",
   {
-    id: serial("id").primaryKey(),
-    name: text("name").notNull(),
-    categoryId: integer("category_id")
+    id: int("id").primaryKey().autoincrement(),
+    name: varchar("name", { length: 255 }).notNull(),
+    categoryId: int("category_id")
       .references(() => categories.id)
       .notNull(),
-    defaultUomId: integer("default_uom_id")
+    defaultUomId: int("default_uom_id")
       .references(() => unitsOfMeasure.id)
       .notNull(),
-    reorderLevel: numeric("reorder_level").notNull().default("0"),
-    hsnCode: text("hsn_code"),
-    gstRate: numeric("gst_rate").notNull().default("0"),
+    reorderLevel: decimal("reorder_level", { precision: 10, scale: 2 }).notNull().default("0"),
+    hsnCode: varchar("hsn_code", { length: 255 }),
+    gstRate: decimal("gst_rate", { precision: 10, scale: 2 }).notNull().default("0"),
     isActive: boolean("is_active").notNull().default(true),
     createdAt: timestamp("created_at").defaultNow(),
   },
@@ -121,26 +120,26 @@ export const items = pgTable(
    BOM
 ======================= */
 
-export const bomRecipes = pgTable("bom_recipes", {
-  id: serial("id").primaryKey(),
-  name: text("name").notNull(),
-  outputItemId: integer("output_item_id")
+export const bomRecipes = mysqlTable("bom_recipes", {
+  id: int("id").primaryKey().autoincrement(),
+  name: varchar("name", { length: 255 }).notNull(),
+  outputItemId: int("output_item_id")
     .references(() => items.id)
     .notNull(),
-  outputQuantity: numeric("output_quantity").notNull(),
+  outputQuantity: decimal("output_quantity", { precision: 10, scale: 2 }).notNull(),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const bomLines = pgTable("bom_lines", {
-  id: serial("id").primaryKey(),
-  bomRecipeId: integer("bom_recipe_id")
+export const bomLines = mysqlTable("bom_lines", {
+  id: int("id").primaryKey().autoincrement(),
+  bomRecipeId: int("bom_recipe_id")
     .references(() => bomRecipes.id, { onDelete: "cascade" })
     .notNull(),
-  itemId: integer("item_id")
+  itemId: int("item_id")
     .references(() => items.id)
     .notNull(),
-  quantity: numeric("quantity").notNull(),
+  quantity: decimal("quantity", { precision: 10, scale: 2 }).notNull(),
 });
 
 export const bomRecipesRelations = relations(bomRecipes, ({ many, one }) => ({
@@ -166,36 +165,36 @@ export const bomLinesRelations = relations(bomLines, ({ one }) => ({
    PRODUCTION
 ======================= */
 
-export const productionRuns = pgTable("production_runs", {
-  id: serial("id").primaryKey(),
+export const productionRuns = mysqlTable("production_runs", {
+  id: int("id").primaryKey().autoincrement(),
   productionDate: date("production_date").notNull(),
-  outputItemId: integer("output_item_id")
+  outputItemId: int("output_item_id")
     .references(() => items.id)
     .notNull(),
-  outputQuantity: numeric("output_quantity").notNull(),
-  warehouseId: integer("warehouse_id")
+  outputQuantity: decimal("output_quantity", { precision: 10, scale: 2 }).notNull(),
+  warehouseId: int("warehouse_id")
     .references(() => warehouses.id)
     .notNull(),
-  batchCount: numeric("batch_count").notNull().default("0"),
-  remarks: text("remarks"),
+  batchCount: decimal("batch_count", { precision: 10, scale: 2 }).notNull().default("0"),
+  remarks: varchar("remarks", { length: 255 }),
   isDeleted: boolean("is_deleted").notNull().default(false),
   deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const productionConsumptions = pgTable("production_consumptions", {
-  id: serial("id").primaryKey(),
-  productionRunId: integer("production_run_id")
+export const productionConsumptions = mysqlTable("production_consumptions", {
+  id: int("id").primaryKey().autoincrement(),
+  productionRunId: int("production_run_id")
     .references(() => productionRuns.id, { onDelete: "cascade" })
     .notNull(),
-  itemId: integer("item_id")
+  itemId: int("item_id")
     .references(() => items.id)
     .notNull(),
-  standardQty: numeric("standard_qty").notNull(),
-  actualQty: numeric("actual_qty").notNull(),
-  openingStock: numeric("opening_stock").notNull().default("0"),
-  variance: numeric("variance").default("0"), // Added explicit variance column for persistence if needed
-  remarks: text("remarks"),
+  standardQty: decimal("standard_qty", { precision: 10, scale: 2 }).notNull(),
+  actualQty: decimal("actual_qty", { precision: 10, scale: 2 }).notNull(),
+  openingStock: decimal("opening_stock", { precision: 10, scale: 2 }).notNull().default("0"),
+  variance: decimal("variance", { precision: 10, scale: 2 }).default("0"), // Added explicit variance column for persistence if needed
+  remarks: varchar("remarks", { length: 255 }),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -203,98 +202,98 @@ export const productionConsumptions = pgTable("production_consumptions", {
    PURCHASES
 ======================= */
 
-export const purchases = pgTable("purchases", {
-  id: serial("id").primaryKey(),
+export const purchases = mysqlTable("purchases", {
+  id: int("id").primaryKey().autoincrement(),
   purchaseDate: date("purchase_date").notNull(),
-  supplierId: integer("supplier_id")
+  supplierId: int("supplier_id")
     .references(() => suppliers.id)
     .notNull(),
-  warehouseId: integer("warehouse_id")
+  warehouseId: int("warehouse_id")
     .references(() => warehouses.id)
     .notNull(),
-  totalAmount: numeric("total_amount").notNull(),
-  payingAmount: numeric("paying_amount").notNull().default("0"),
+  totalAmount: decimal("total_amount", { precision: 10, scale: 2 }).notNull(),
+  payingAmount: decimal("paying_amount", { precision: 10, scale: 2 }).notNull().default("0"),
   dueDate: date("due_date"),
   isDeleted: boolean("is_deleted").notNull().default(false),
   deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const purchaseItems = pgTable("purchase_items", {
-  id: serial("id").primaryKey(),
-  purchaseId: integer("purchase_id")
+export const purchaseItems = mysqlTable("purchase_items", {
+  id: int("id").primaryKey().autoincrement(),
+  purchaseId: int("purchase_id")
     .references(() => purchases.id, { onDelete: "cascade" })
     .notNull(),
-  itemId: integer("item_id")
+  itemId: int("item_id")
     .references(() => items.id)
     .notNull(),
-  quantity: numeric("quantity").notNull(),
-  rate: numeric("rate").notNull(),
-  amount: numeric("amount").notNull(),
-  gstRate: numeric("gst_rate").notNull().default("0"),
-  gstAmount: numeric("gst_amount").notNull().default("0"),
+  quantity: decimal("quantity", { precision: 10, scale: 2 }).notNull(),
+  rate: decimal("rate", { precision: 10, scale: 2 }).notNull(),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  gstRate: decimal("gst_rate", { precision: 10, scale: 2 }).notNull().default("0"),
+  gstAmount: decimal("gst_amount", { precision: 10, scale: 2 }).notNull().default("0"),
 });
 
 /* =======================
    SALES
 ======================= */
 
-export const sales = pgTable("sales", {
-  id: serial("id").primaryKey(),
+export const sales = mysqlTable("sales", {
+  id: int("id").primaryKey().autoincrement(),
   saleDate: date("sale_date").notNull(),
-  customerId: integer("customer_id")
+  customerId: int("customer_id")
     .references(() => customers.id)
     .notNull(),
-  warehouseId: integer("warehouse_id")
+  warehouseId: int("warehouse_id")
     .references(() => warehouses.id)
     .notNull(),
-  totalAmount: numeric("total_amount").notNull(),
-  receivedAmount: numeric("received_amount").notNull().default("0"),
+  totalAmount: decimal("total_amount", { precision: 10, scale: 2 }).notNull(),
+  receivedAmount: decimal("received_amount", { precision: 10, scale: 2 }).notNull().default("0"),
   dueDate: date("due_date"),
   // E-Way Bill Fields
-  ewayBillNumber: text("eway_bill_number"),
-  transporterId: text("transporter_id"),
-  transporterName: text("transporter_name"),
-  vehicleNumber: text("vehicle_number"),
-  distance: numeric("distance"),
-  cgstAmount: numeric("cgst_amount").default("0"),
-  sgstAmount: numeric("sgst_amount").default("0"),
-  igstAmount: numeric("igst_amount").default("0"),
+  ewayBillNumber: varchar("eway_bill_number", { length: 255 }),
+  transporterId: varchar("transporter_id", { length: 255 }),
+  transporterName: varchar("transporter_name", { length: 255 }),
+  vehicleNumber: varchar("vehicle_number", { length: 255 }),
+  distance: decimal("distance", { precision: 10, scale: 2 }),
+  cgstAmount: decimal("cgst_amount", { precision: 10, scale: 2 }).default("0"),
+  sgstAmount: decimal("sgst_amount", { precision: 10, scale: 2 }).default("0"),
+  igstAmount: decimal("igst_amount", { precision: 10, scale: 2 }).default("0"),
   isDeleted: boolean("is_deleted").notNull().default(false),
   deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const salesItems = pgTable("sale_items", {
-  id: serial("id").primaryKey(),
-  saleId: integer("sale_id")
+export const salesItems = mysqlTable("sale_items", {
+  id: int("id").primaryKey().autoincrement(),
+  saleId: int("sale_id")
     .references(() => sales.id, { onDelete: "cascade" })
     .notNull(),
-  itemId: integer("item_id")
+  itemId: int("item_id")
     .references(() => items.id)
     .notNull(),
-  quantity: numeric("quantity").notNull(),
-  rate: numeric("rate").notNull(),
-  amount: numeric("amount").notNull(),
-  gstRate: numeric("gst_rate").notNull().default("0"),
-  gstAmount: numeric("gst_amount").notNull().default("0"),
+  quantity: decimal("quantity", { precision: 10, scale: 2 }).notNull(),
+  rate: decimal("rate", { precision: 10, scale: 2 }).notNull(),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  gstRate: decimal("gst_rate", { precision: 10, scale: 2 }).notNull().default("0"),
+  gstAmount: decimal("gst_amount", { precision: 10, scale: 2 }).notNull().default("0"),
 });
 
 /* =======================
    STOCK LEDGER
 ======================= */
 
-export const stockLedger = pgTable("stock_ledger", {
-  id: serial("id").primaryKey(),
-  itemId: integer("item_id")
+export const stockLedger = mysqlTable("stock_ledger", {
+  id: int("id").primaryKey().autoincrement(),
+  itemId: int("item_id")
     .references(() => items.id)
     .notNull(),
-  warehouseId: integer("warehouse_id")
+  warehouseId: int("warehouse_id")
     .references(() => warehouses.id)
     .notNull(),
-  quantity: numeric("quantity").notNull(),
-  referenceType: text("reference_type").notNull(),
-  referenceId: integer("reference_id").notNull(),
+  quantity: decimal("quantity", { precision: 10, scale: 2 }).notNull(),
+  referenceType: varchar("reference_type", { length: 255 }).notNull(),
+  referenceId: int("reference_id").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -302,20 +301,20 @@ export const stockLedger = pgTable("stock_ledger", {
    SUPPLIER PAYMENTS
 ======================= */
 
-export const supplierPayments = pgTable("supplier_payments", {
-  id: serial("id").primaryKey(),
+export const supplierPayments = mysqlTable("supplier_payments", {
+  id: int("id").primaryKey().autoincrement(),
   paymentDate: date("payment_date").notNull(),
-  supplierId: integer("supplier_id")
+  supplierId: int("supplier_id")
     .references(() => suppliers.id)
     .notNull(),
-  purchaseId: integer("purchase_id")
+  purchaseId: int("purchase_id")
     .references(() => purchases.id, { onDelete: "cascade" }),
-  ownerId: integer("owner_id")
+  ownerId: int("owner_id")
     .references(() => owners.id)
     .notNull(),
-  amount: numeric("amount").notNull(),
-  paymentMethod: text("payment_method").notNull(),
-  remarks: text("remarks"),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  paymentMethod: varchar("payment_method", { length: 255 }).notNull(),
+  remarks: varchar("remarks", { length: 255 }),
   nextPaymentDate: date("next_payment_date"),
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -324,56 +323,56 @@ export const supplierPayments = pgTable("supplier_payments", {
    CUSTOMER PAYMENTS
 ======================= */
 
-export const customerPayments = pgTable("customer_payments", {
-  id: serial("id").primaryKey(),
+export const customerPayments = mysqlTable("customer_payments", {
+  id: int("id").primaryKey().autoincrement(),
   paymentDate: date("payment_date").notNull(),
-  customerId: integer("customer_id")
+  customerId: int("customer_id")
     .references(() => customers.id)
     .notNull(),
-  saleId: integer("sale_id")
+  saleId: int("sale_id")
     .references(() => sales.id, { onDelete: "cascade" }),
-  ownerId: integer("owner_id")
+  ownerId: int("owner_id")
     .references(() => owners.id)
     .notNull(),
-  amount: numeric("amount").notNull(),
-  paymentMethod: text("payment_method").notNull(),
-  remarks: text("remarks"),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  paymentMethod: varchar("payment_method", { length: 255 }).notNull(),
+  remarks: varchar("remarks", { length: 255 }),
   nextReceiptDate: date("next_receipt_date"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const stockTransfers = pgTable("stock_transfers", {
-  id: serial("id").primaryKey(),
+export const stockTransfers = mysqlTable("stock_transfers", {
+  id: int("id").primaryKey().autoincrement(),
   transferDate: date("transfer_date").notNull(),
-  itemId: integer("item_id")
+  itemId: int("item_id")
     .references(() => items.id)
     .notNull(),
-  fromWarehouseId: integer("from_warehouse_id")
+  fromWarehouseId: int("from_warehouse_id")
     .references(() => warehouses.id)
     .notNull(),
-  toWarehouseId: integer("to_warehouse_id")
+  toWarehouseId: int("to_warehouse_id")
     .references(() => warehouses.id), // Nullable for Issue/Consume
-  quantity: numeric("quantity").notNull(),
-  uomId: integer("uom_id")
+  quantity: decimal("quantity", { precision: 10, scale: 2 }).notNull(),
+  uomId: int("uom_id")
     .references(() => unitsOfMeasure.id)
     .notNull(),
-  remarks: text("remarks"),
+  remarks: varchar("remarks", { length: 255 }),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const adminSettings = pgTable("admin_settings", {
-  id: serial("id").primaryKey(),
-  adminName: text("admin_name").notNull().default("Admin"),
-  companyName: text("company_name").notNull().default("My Company"),
-  phone: text("phone").notNull().default(""),
-  email: text("email").notNull().default(""),
-  address: text("address").notNull().default(""),
-  gstNumber: text("gst_number").default(""),
+export const adminSettings = mysqlTable("admin_settings", {
+  id: int("id").primaryKey().autoincrement(),
+  adminName: varchar("admin_name", { length: 255 }).notNull().default("Admin"),
+  companyName: varchar("company_name", { length: 255 }).notNull().default("My Company"),
+  phone: varchar("phone", { length: 255 }).notNull().default(""),
+  email: varchar("email", { length: 255 }).notNull().default(""),
+  address: varchar("address", { length: 255 }).notNull().default(""),
+  gstNumber: varchar("gst_number", { length: 255 }).default(""),
   // GST API Credentials
-  gspClientId: text("gsp_client_id").default(""),
-  gspClientSecret: text("gsp_client_secret").default(""),
-  gspUsername: text("gsp_username").default(""),
-  gspPassword: text("gsp_password").default(""),
+  gspClientId: varchar("gsp_client_id", { length: 255 }).default(""),
+  gspClientSecret: varchar("gsp_client_secret", { length: 255 }).default(""),
+  gspUsername: varchar("gsp_username", { length: 255 }).default(""),
+  gspPassword: varchar("gsp_password", { length: 255 }).default(""),
   isServiceActive: boolean("is_service_active").notNull().default(true),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
