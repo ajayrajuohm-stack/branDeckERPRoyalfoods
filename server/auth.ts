@@ -83,6 +83,7 @@ export function setupAuth(app: Express) {
 
     app.post("/api/register", async (req, res, next) => {
         try {
+            console.log(`[AUTH] Registration attempt for: ${req.body?.username}`);
             const { username, password } = req.body;
 
             if (!username || !password) {
@@ -118,6 +119,7 @@ export function setupAuth(app: Express) {
     });
 
     app.post("/api/login", (req, res, next) => {
+        console.log(`[AUTH] Login attempt for: ${req.body?.username}`);
         passport.authenticate("local", (err: any, user: any, info: any) => {
             if (err) return next(err);
             if (!user) return res.status(401).send("Invalid username or password");

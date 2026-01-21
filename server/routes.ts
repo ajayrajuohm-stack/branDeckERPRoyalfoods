@@ -71,6 +71,7 @@ export async function registerRoutes(_server: any, app: Express) {
     if (!req.path.startsWith("/api") ||
       req.path === "/api/health" ||
       req.path === "/api/login" ||
+      req.path === "/api/register" ||
       req.path === "/api/user" ||
       req.path === "/api/logout" ||
       req.path === "/api/admin" ||
