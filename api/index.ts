@@ -82,13 +82,16 @@ app.get('/api/health', (_req, res) => {
     });
 });
 
-/* -------------------- VERCEL SERVERLESS ONLY -------------------- */
+/* -------------------- VERCEL SERVERLESS EXPORT -------------------- */
 // ✅ This app runs ONLY on Vercel serverless
-// No traditional server startup needed!
-// Vercel automatically handles all HTTP requests
+// Export the Express app as the default handler for Vercel
 
 console.log('✅ Royal Foods ERP configured for Vercel Serverless + Neon PostgreSQL');
 console.log('🗄️ Database: Neon (HTTP mode)');
 console.log('🚀 Platform: Vercel Serverless Functions');
 
+// Export for Vercel serverless functions
 export default app;
+
+// Also export as a named export for compatibility
+export { app };

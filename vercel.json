@@ -1,15 +1,15 @@
 {
+    "buildCommand": "npm run build",
+    "outputDirectory": "dist",
     "functions": {
         "api/index.ts": {
-            "includeFiles": [
-                "shared/**"
-            ]
+            "includeFiles": "shared/**"
         }
     },
     "rewrites": [
         {
             "source": "/api/(.*)",
-            "destination": "/api/index.ts"
+            "destination": "/api"
         },
         {
             "source": "/(.*)",
