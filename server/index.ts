@@ -90,16 +90,19 @@ app.get('/api/health', (_req, res) => {
 if (process.env.VERCEL) {
   // Vercel handles this via api/index.ts, do nothing here.
 } else if (process.env.NODE_ENV === "production") {
-  // 🚀 PRODUCTION (Hostinger/VPS)
-  // Vite middleware is NOT used. Static files are served via serveStatic above.
   const { createServer } = await import("http");
   const httpServer = createServer(app);
-  const PORT = Number(process.env.PORT) || 5000;
+  // Hostinger and most cloud providers provide the PORT automatically
+  const PORT = Number(process.env.PORT) || 3000;
 
   httpServer.listen(PORT, "0.0.0.0", () => {
-    console.log(`\n🚀 Production Server running at http://0.0.0.0:${PORT}`);
-    console.log(`👉 Environment: Production (VPS/Hostinger)`);
+    console.log(`\n-----------------------------------------`);
+    console.log(`🚀 APP STARTED SUCCESSFULLY`);
+    console.log(`📡 Listening on: http://0.0.0.0:${PORT}`);
+    console.log(`🌍 Environment: ${process.env.NODE_ENV}`);
+    console.log(`-----------------------------------------\n`);
   });
+
 } else {
   // 🛠️ DEVELOPMENT
   const { createServer } = await import("http");

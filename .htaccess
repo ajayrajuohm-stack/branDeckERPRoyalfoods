@@ -1,0 +1,29 @@
+# .htaccess for Royal Foods ERP on Hostinger Business
+# This file handles URL rewriting for the Node.js application
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    
+    # Don't rewrite for existing files
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    
+    # Pass all requests to Node.js app
+    RewriteRule ^(.*)$ /$1 [L,QSA]
+</IfModule>
+
+# Security headers
+<IfModule mod_headers.c>
+    Header set X-Content-Type-Options "nosniff"
+    Header set X-Frame-Options "SAMEORIGIN"
+    Header set X-XSS-Protection "1; mode=block"
+</IfModule>
+
+# Enable gzip compression
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css text/javascript application/javascript application/json
+</IfModule>
+
+# Set file upload size (adjust if needed)
+php_value upload_max_filesize 50M
+php_value post_max_size 50M

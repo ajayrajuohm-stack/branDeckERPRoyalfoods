@@ -11,7 +11,17 @@
     "preview": "vite preview",
     "check": "tsc",
     "db:push": "drizzle-kit push",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "vps:build": "npm install && npm run build",
+    "vps:start": "pm2 start ecosystem.config.js",
+    "vps:restart": "pm2 restart royal-foods-erp",
+    "vps:stop": "pm2 stop royal-foods-erp",
+    "vps:logs": "pm2 logs royal-foods-erp",
+    "vps:status": "pm2 status",
+    "cpanel:install": "npm install --production",
+    "cpanel:build": "npm run build",
+    "cpanel:setup": "npm run cpanel:install && npm run cpanel:build && npm run db:push",
+    "hostinger:deploy": "npm install --production && npm run build"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
