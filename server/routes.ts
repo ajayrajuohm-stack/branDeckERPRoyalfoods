@@ -33,7 +33,7 @@ import {
   customerPayments,
   stockTransfers,
   adminSettings,
-} from "@shared/schema";
+} from "../shared/schema";
 
 
 /* =======================
@@ -133,7 +133,7 @@ export async function registerRoutes(_server: any, app: Express) {
     try {
       if (!req.file) return res.status(400).json({ message: "No file uploaded" });
       const filePath = req.file.path;
-      
+
       try {
         const result = await importPurchasesFromExcel(filePath);
         res.json(result);
@@ -151,7 +151,7 @@ export async function registerRoutes(_server: any, app: Express) {
     try {
       if (!req.file) return res.status(400).json({ message: "No file uploaded" });
       const filePath = req.file.path;
-      
+
       try {
         const result = await importSalesFromExcel(filePath);
         res.json(result);

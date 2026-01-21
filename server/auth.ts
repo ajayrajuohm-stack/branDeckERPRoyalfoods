@@ -3,7 +3,7 @@ import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
 import express, { type Express } from "express";
 import { scryptSync, randomBytes, timingSafeEqual } from "crypto";
-import { users, type User } from "@shared/schema";
+import { users, type User } from "../shared/schema";
 import { db } from "./db";
 import { eq } from "drizzle-orm";
 
@@ -29,6 +29,17 @@ export function setupAuth(app: Express) {
         sameSite: "lax",
         httpOnly: true,
     }));
+
+    // Polyfill for Passport 0.7+ compatibility with cookie-session
+    app.use((req: any, _res: any, next: any) => {
+        if (req.session && !req.session.regenerate) {
+            req.session.regenerate = (cb: any) => cb();
+        }
+        if (req.session && !req.session.save) {
+            req.session.save = (cb: any) => cb();
+        }
+        next();
+    });
 
     app.use(passport.initialize());
     app.use(passport.session());
@@ -112,6 +123,7 @@ export function setupAuth(app: Express) {
             if (!user) return res.status(401).send("Invalid username or password");
             req.login(user, (err) => {
                 if (err) return next(err);
+                // cookie-session handles session automatically, no need for manual save/regenerate
                 res.status(200).json(user);
             });
         })(req, res, next);

@@ -88,8 +88,13 @@ app.get('/api/health', (_req, res) => {
 // Vercel ignores this file and uses api/index.ts instead.
 if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
   const { createServer } = await import("http");
+  const { setupVite } = await import("./vite"); // Load Vite middleware
+
   const httpServer = createServer(app);
   const PORT = Number(process.env.PORT) || 5000;
+
+  // Attach Vite middleware for HMR and serving frontend
+  await setupVite(httpServer, app);
 
   httpServer.listen(PORT, "0.0.0.0", () => {
     console.log(`\n🚀 Local Server running at http://localhost:${PORT}`);
