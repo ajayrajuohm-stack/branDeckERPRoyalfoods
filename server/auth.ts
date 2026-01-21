@@ -1,14 +1,11 @@
+import cookieSession from "cookie-session";
 import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
-import session from "express-session";
 import express, { type Express } from "express";
 import { scryptSync, randomBytes, timingSafeEqual } from "crypto";
 import { users, type User } from "@shared/schema";
-import { db, pool } from "./db";
+import { db } from "./db";
 import { eq } from "drizzle-orm";
-import connectPg from "connect-pg-simple";
-
-const PostgresSessionStore = connectPg(session);
 
 async function hashPassword(password: string) {
     const salt = randomBytes(16).toString("hex");
@@ -24,26 +21,15 @@ async function comparePasswords(supplied: string, stored: string) {
 }
 
 export function setupAuth(app: Express) {
-    const sessionSettings: session.SessionOptions = {
-        secret: process.env.SESSION_SECRET || "erp-secret-key",
-        resave: false,
-        saveUninitialized: false,
-        store: new PostgresSessionStore({
-            pool,
-            createTableIfMissing: true,
-        }),
-        cookie: {
-            secure: process.env.NODE_ENV === "production",
-            sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-            maxAge: 24 * 60 * 60 * 1000, // 24 hours
-        },
-    };
+    app.use(cookieSession({
+        name: 'session',
+        keys: [process.env.SESSION_SECRET || 'erp-secret-key'],
+        maxAge: 24 * 60 * 60 * 1000, // 24 hours
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        httpOnly: true,
+    }));
 
-    if (app.get("env") === "production") {
-        app.set("trust proxy", 1);
-    }
-
-    app.use(session(sessionSettings));
     app.use(passport.initialize());
     app.use(passport.session());
 
