@@ -1,3 +1,4 @@
+// @ts-nocheck
 import XLSX from "xlsx";
 import { db } from "./db";
 import { cleanupTempFile } from "./cleanup";

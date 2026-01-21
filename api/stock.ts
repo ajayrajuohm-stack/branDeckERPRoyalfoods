@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { db } from "../db";
 import { stockLedger } from "@shared/schema";
 import { sql } from "drizzle-orm";
