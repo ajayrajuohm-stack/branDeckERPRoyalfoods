@@ -8,6 +8,7 @@ import { format } from "date-fns";
 import { db } from "./db";
 import { getCurrentStock } from "./storage/stock";
 import { importPurchasesFromExcel, importSalesFromExcel } from "./import-transactions";
+import { cleanupTempFile } from "./utils/cleanup";
 
 import {
   categories,
@@ -36,10 +37,21 @@ import {
 
 
 /* =======================
-   MULTER CONFIG
+   MULTER CONFIG - VERCEL COMPATIBLE
 ======================= */
+import { tmpdir } from "os";
+import { existsSync, mkdirSync } from "fs";
+
+// Use /tmp for Vercel serverless compatibility
+const uploadDir = process.env.VERCEL ? tmpdir() : "uploads/";
+
+// Ensure upload directory exists (for local dev)
+if (!process.env.VERCEL && !existsSync(uploadDir)) {
+  mkdirSync(uploadDir, { recursive: true });
+}
+
 const upload = multer({
-  dest: "uploads/",
+  dest: uploadDir,
   fileFilter: (_req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
     if (ext !== ".xlsx" && ext !== ".xls") {
@@ -120,8 +132,15 @@ export async function registerRoutes(_server: any, app: Express) {
   app.post("/api/purchases/import", upload.single("file"), async (req, res) => {
     try {
       if (!req.file) return res.status(400).json({ message: "No file uploaded" });
-      const result = await importPurchasesFromExcel(req.file.path);
-      res.json(result);
+      const filePath = req.file.path;
+      
+      try {
+        const result = await importPurchasesFromExcel(filePath);
+        res.json(result);
+      } finally {
+        // Always cleanup temp file, even on error
+        await cleanupTempFile(filePath);
+      }
     } catch (err) {
       handleDbError(err, res);
     }
@@ -131,8 +150,15 @@ export async function registerRoutes(_server: any, app: Express) {
   app.post("/api/sales/import", upload.single("file"), async (req, res) => {
     try {
       if (!req.file) return res.status(400).json({ message: "No file uploaded" });
-      const result = await importSalesFromExcel(req.file.path);
-      res.json(result);
+      const filePath = req.file.path;
+      
+      try {
+        const result = await importSalesFromExcel(filePath);
+        res.json(result);
+      } finally {
+        // Always cleanup temp file, even on error
+        await cleanupTempFile(filePath);
+      }
     } catch (err) {
       handleDbError(err, res);
     }

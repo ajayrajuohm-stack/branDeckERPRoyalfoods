@@ -1,18 +1,15 @@
 import XLSX from "xlsx";
 import { db } from "./db";
-import { suppliers, insertSupplierSchema } from "../shared/schema";
+import { customers, insertCustomerSchema } from "../shared/schema";
 
 /**
- * Import suppliers from Excel file
+ * Import customers from Excel file
  *
  * Expected columns (case-sensitive):
- * name | personName | contactInfo | address
+ * name | contactPerson | contactInfo | address
  */
-export async function importSuppliersFromExcel(filePath: string) {
-  // Read file into buffer for Vercel compatibility
-  const fs = await import('fs');
-  const fileBuffer = fs.readFileSync(filePath);
-  const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
+export async function importCustomersFromExcel(filePath: string) {
+  const workbook = XLSX.readFile(filePath);
   const sheetName = workbook.SheetNames[0];
   const sheet = workbook.Sheets[sheetName];
 
@@ -32,19 +29,18 @@ export async function importSuppliersFromExcel(filePath: string) {
        */
       const normalized = {
         name: raw.name ? String(raw.name).trim() : undefined,
-        personName: raw.personName ? String(raw.personName).trim() : undefined,
-        contactInfo: raw.contactInfo
-          ? String(raw.contactInfo).trim()
-          : undefined,
+        contactPerson: raw.contactPerson ? String(raw.contactPerson).trim() : undefined,
+        contactInfo: raw.contactInfo ? String(raw.contactInfo).trim() : undefined,
         address: raw.address ? String(raw.address).trim() : undefined,
+        shippingAddress: raw.shippingAddress ? String(raw.shippingAddress).trim() : undefined,
         gstNumber: raw.gstNumber ? String(raw.gstNumber).trim() : undefined,
       };
 
       // Validate after normalization
-      const parsed = insertSupplierSchema.parse(normalized);
+      const parsed = insertCustomerSchema.parse(normalized);
 
       await db
-        .insert(suppliers)
+        .insert(customers)
         .values(parsed)
         .onConflictDoNothing(); // skips duplicates safely
 
