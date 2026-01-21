@@ -55,9 +55,12 @@ app.use((req, res, next) => {
 // Auth setup
 setupAuth(app);
 
-// API routes
-registerRoutes(null, app).catch(e => {
-  console.error("Failed to register routes:", e);
+// API routes - MUST AWAIT to ensure routes are ready
+await registerRoutes(null, app);
+
+// API 404 handler - prevents API calls from hitting SPA fallback
+app.use("/api/*", (req, res) => {
+  res.status(404).json({ message: `API route not found: ${req.method} ${req.originalUrl}` });
 });
 
 // Error handler
@@ -74,25 +77,13 @@ if (process.env.NODE_ENV === "production" && !process.env.VERCEL) {
   serveStatic(app);
 }
 
-/* -------------------- SERVER -------------------- */
-// ✅ VERCEL ONLY - No traditional server needed!
-// Vercel handles all server infrastructure automatically
-
-// Health check endpoint
-app.get('/api/health', (_req, res) => {
-  res.status(200).json({ status: 'ok', environment: 'local-development' });
-});
-
-// ✅ LOCAL DEVELOPMENT ONLY
-// This listener is required for 'npm run dev' to work on your machine.
-// Vercel ignores this file and uses api/index.ts instead.
-// ✅ STARTUP LOGIC
+/* -------------------- STARTUP LOGIC -------------------- */
 if (process.env.VERCEL) {
   // Vercel handles this via api/index.ts, do nothing here.
 } else if (process.env.NODE_ENV === "production") {
   const { createServer } = await import("http");
   const httpServer = createServer(app);
-  // Hostinger and most cloud providers provide the PORT automatically
+  // Hostinger provides the PORT automatically
   const PORT = Number(process.env.PORT) || 3000;
 
   httpServer.listen(PORT, "0.0.0.0", () => {
@@ -102,7 +93,6 @@ if (process.env.VERCEL) {
     console.log(`🌍 Environment: ${process.env.NODE_ENV}`);
     console.log(`-----------------------------------------\n`);
   });
-
 } else {
   // 🛠️ DEVELOPMENT
   const { createServer } = await import("http");
