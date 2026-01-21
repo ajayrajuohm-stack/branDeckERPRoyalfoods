@@ -6,24 +6,40 @@ import fs from 'fs';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const tsxPath = path.join(__dirname, 'node_modules', '.bin', 'tsx');
 
-console.log('🚀 Starting Royal Foods ERP (Hostinger Dedicated Mode)...');
+console.log('🚀 Starting Royal Foods ERP (Hostinger Resilient Mode)...');
 
-// Check if tsx exists
-if (!fs.existsSync(tsxPath)) {
-    console.error('❌ Error: tsx builder not found in node_modules.');
-    console.log('Running npm install to fix...');
+// Try to fix permissions before starting
+try {
+    spawn('chmod', ['+x', tsxPath], { stdio: 'ignore' });
+} catch (e) { }
+
+// Use a function to start the process
+function startServer(command, args) {
+    console.log(`Executing: ${command} ${args.join(' ')}`);
+    const child = spawn(command, args, {
+        stdio: 'inherit',
+        shell: true,
+        env: {
+            ...process.env,
+            NODE_ENV: 'production'
+        }
+    });
+
+    child.on('close', (code) => {
+        if (code !== 0 && command !== 'npx') {
+            console.log('❌ Direct path failed, trying with npx...');
+            startServer('npx', ['tsx', 'server/index.ts']);
+        } else {
+            console.log(`\n🛑 Process exited with code ${code}`);
+            process.exit(code);
+        }
+    });
 }
 
-const child = spawn(tsxPath, ['server/index.ts'], {
-    stdio: 'inherit',
-    shell: true,
-    env: {
-        ...process.env,
-        NODE_ENV: 'production'
-    }
-});
-
-child.on('close', (code) => {
-    console.log(`\n🛑 App process exited with code ${code}`);
-    process.exit(code);
-});
+// Start with direct path first
+if (fs.existsSync(tsxPath)) {
+    startServer(tsxPath, ['server/index.ts']);
+} else {
+    console.log('tsx not found at direct path, trying npx...');
+    startServer('npx', ['tsx', 'server/index.ts']);
+}

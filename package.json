@@ -7,6 +7,7 @@
     "dev": "cross-env NODE_ENV=development tsx server/index.ts",
     "start": "cross-env NODE_ENV=production tsx server/index.ts",
     "build": "npx vite build",
+    "prebuild": "chmod +x ./node_modules/.bin/* || true",
     "vercel-build": "npx vite build",
     "preview": "vite preview",
     "check": "tsc",
