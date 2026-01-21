@@ -11,12 +11,7 @@ console.log(`   URL: ${process.env.DATABASE_URL.split('@')[1] ? '***@' + process
 console.log("   ➤ Mode: Hostinger MySQL");
 
 // Create MySQL connection pool
-const pool = mysql.createPool({
-  uri: process.env.DATABASE_URL,
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0
-});
+const pool = mysql.createPool(process.env.DATABASE_URL!);
 
 // Test connection on startup
 pool.getConnection()
@@ -26,6 +21,7 @@ pool.getConnection()
   })
   .catch(err => {
     console.error("   ❌ Failed to connect to Hostinger MySQL:", err.message);
+    console.error("   Full error details:", err);
   });
 
 const db = drizzle(pool, { schema, mode: 'default' });
