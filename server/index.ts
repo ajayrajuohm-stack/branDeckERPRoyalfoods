@@ -86,19 +86,31 @@ app.get('/api/health', (_req, res) => {
 // ✅ LOCAL DEVELOPMENT ONLY
 // This listener is required for 'npm run dev' to work on your machine.
 // Vercel ignores this file and uses api/index.ts instead.
-if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
+// ✅ STARTUP LOGIC
+if (process.env.VERCEL) {
+  // Vercel handles this via api/index.ts, do nothing here.
+} else if (process.env.NODE_ENV === "production") {
+  // 🚀 PRODUCTION (Hostinger/VPS)
+  // Vite middleware is NOT used. Static files are served via serveStatic above.
   const { createServer } = await import("http");
-  const { setupVite } = await import("./vite"); // Load Vite middleware
-
   const httpServer = createServer(app);
   const PORT = Number(process.env.PORT) || 5000;
 
-  // Attach Vite middleware for HMR and serving frontend
+  httpServer.listen(PORT, "0.0.0.0", () => {
+    console.log(`\n🚀 Production Server running at http://0.0.0.0:${PORT}`);
+    console.log(`👉 Environment: Production (VPS/Hostinger)`);
+  });
+} else {
+  // 🛠️ DEVELOPMENT
+  const { createServer } = await import("http");
+  const { setupVite } = await import("./vite");
+  const httpServer = createServer(app);
+  const PORT = Number(process.env.PORT) || 5000;
+
   await setupVite(httpServer, app);
 
   httpServer.listen(PORT, "0.0.0.0", () => {
-    console.log(`\n🚀 Local Server running at http://localhost:${PORT}`);
-    console.log(`📝 API available at http://localhost:${PORT}/api`);
+    console.log(`\n🚀 Local Dev Server running at http://localhost:${PORT}`);
   });
 }
 
