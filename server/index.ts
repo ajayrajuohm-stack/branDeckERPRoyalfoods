@@ -1,10 +1,10 @@
 import "dotenv/config";
-// ♻️ Force Restart
 import express, { type Request, Response, NextFunction } from "express";
 import { createServer } from "http";
 import { registerRoutes } from "./routes";
 import { setupAuth } from "./auth";
 import { serveStatic } from "./static";
+import cors from "cors";
 
 const app = express();
 const httpServer = createServer(app);
@@ -17,6 +17,11 @@ declare module "http" {
 }
 
 /* -------------------- MIDDLEWARE -------------------- */
+app.use(cors({
+  origin: true,
+  credentials: true,
+}));
+
 app.use(
   express.json({
     verify: (req, _res, buf) => {
@@ -90,13 +95,17 @@ app.use((req, res, next) => {
       res.status(200).json({ status: 'ok' });
     });
 
-    httpServer.listen(PORT, "0.0.0.0", () => {
-      log(`Server running at http://0.0.0.0:${PORT}`);
-    });
+    if (process.env.VERCEL) {
+      log("Running as Vercel Serverless Function");
+    } else {
+      httpServer.listen(PORT, "0.0.0.0", () => {
+        log(`Server running at http://0.0.0.0:${PORT}`);
+      });
+    }
 
-    // Keep-Alive Mechanism for Render Free Tier
+    // Keep-Alive Mechanism for Render Free Tier (Optional for Vercel)
     const RENDER_EXTERNAL_URL = process.env.RENDER_EXTERNAL_URL;
-    if (RENDER_EXTERNAL_URL) {
+    if (RENDER_EXTERNAL_URL && !process.env.VERCEL) {
       log(`Starting Keep-Alive for ${RENDER_EXTERNAL_URL}`, "keep-alive");
       const intervalMs = 14 * 60 * 1000; // 14 minutes (Render sleeps after 15)
 
@@ -115,3 +124,5 @@ app.use((req, res, next) => {
     process.exit(1);
   }
 })();
+
+export default app;

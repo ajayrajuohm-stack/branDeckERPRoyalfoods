@@ -1,29 +1,34 @@
-# BranDeck ERP - Cloud Deployment Guide
+# BranDeck ERP - Vercel + Neon Deployment Guide
 
-This guide explains how to host your ERP for **Lifetime Free** using Supabase and Render.
+This guide explains how to host your ERP for **High Performance** using Neon (Postgres) and Vercel.
 
-## 1. Database Setup (Supabase)
-- **Provider**: [Supabase](https://supabase.com/)
-- **Step**: Create a project and copy the **Connection URI** from Project Settings > Database.
+## 1. Database Setup (Neon)
+- **Provider**: [Neon](https://neon.tech/)
+- **Step**: Create a project and select "Postgres".
+- **Connection String**: 
+  - Copy the **Connection String**.
+  - **IMPORTANT**: Use the **Pooled connection string** (usually ends with `-pooler`) for serverless stability.
 - **Cost**: $0 (Free Tier)
 
-## 2. Server Setup (Render)
-- **Provider**: [Render](https://render.com/)
-- **Runtime**: Node.js
-- **Build Command**: `npm install && npm run build`
-- **Start Command**: `npm run start`
+## 2. Platform Setup (Vercel)
+- **Provider**: [Vercel](https://vercel.com/)
+- **Runtime**: Node.js (Serverless)
+- **Step**: Import your GitHub repository.
+- **Project Settings**:
+  - **Framework Preset**: Vite (detected automatically)
+  - **Build Command**: `npm run build`
+  - **Output Directory**: `dist/public`
 - **Required Env Vars**:
-  - `DATABASE_URL`: (The URI from Supabase)
-  - `SESSION_SECRET`: (A random string for security)
+  - `DATABASE_URL`: (Your Neon Connection String)
+  - `SESSION_SECRET`: (A random string)
   - `NODE_ENV`: `production`
-- **Cost**: $0 (Free Tier)
+- **Cost**: $0 (Hobby Tier)
 
-## 3. How to Update
-Once hosted, whenever you ask the AI to make a change:
-1. AI modifies the local code.
-2. You commit and push the changes to **GitHub**.
-3. Render will automatically detect the move and update the live website within minutes.
+## 3. Benefits of this Setup
+- **Speed**: Neon wakes up much faster than Supabase/Render free tiers.
+- **Global CDNs**: Vercel serves your frontend from the nearest edge server.
+- **Ease of Use**: No need for complex split hosting (Miles Web). One dashboard for everything.
 
 ## 4. Troubleshooting
-- **Inactivity Pause**: If the app isn't used for 7 days, Supabase might pause. Log in to Supabase and click "Resume Project."
-- **Cold Start**: The first time you open the app in the morning, it may take 30 seconds to wake up.
+- **Latency**: The first request in many hours might take 2-3 seconds as Neon resumes. Subsequent requests are lightning fast.
+- **Session Auth**: If login fails, ensure `SESSION_SECRET` is set in Vercel settings.
