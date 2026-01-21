@@ -1,13 +1,11 @@
 import "dotenv/config";
 import express, { type Request, Response, NextFunction } from "express";
-import { createServer } from "http";
 import { registerRoutes } from "./routes";
 import { setupAuth } from "./auth";
 import { serveStatic } from "./static";
 import cors from "cors";
 
 const app = express();
-const httpServer = createServer(app);
 
 /* -------------------- TYPES -------------------- */
 declare module "http" {
@@ -54,12 +52,11 @@ app.use((req, res, next) => {
   next();
 });
 
-/* -------------------- BOOTSTRAP -------------------- */
 // Auth setup
 setupAuth(app);
 
 // API routes
-registerRoutes(httpServer, app).catch(e => {
+registerRoutes(null, app).catch(e => {
   console.error("Failed to register routes:", e);
 });
 
@@ -75,16 +72,6 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
 if (process.env.NODE_ENV === "production" && !process.env.VERCEL) {
   // Production: serve built frontend (only if not on Vercel)
   serveStatic(app);
-  log("Serving static frontend", "static");
-} else if (!process.env.VERCEL) {
-  // Development: attach Vite frontend
-  try {
-    const { setupVite } = await import("./vite");
-    await setupVite(httpServer, app);
-    log("Vite frontend attached", "vite");
-  } catch (e) {
-    console.error("Vite setup failed", e);
-  }
 }
 
 /* -------------------- SERVER -------------------- */
@@ -95,11 +82,11 @@ app.get('/api/health', (_req, res) => {
   res.status(200).json({ status: 'ok' });
 });
 
-if (process.env.VERCEL) {
-  log("Running as Vercel Serverless Function");
-} else {
+if (!process.env.VERCEL) {
+  const { createServer } = await import("http");
+  const httpServer = createServer(app);
   httpServer.listen(PORT, "0.0.0.0", () => {
-    log(`Server running at http://0.0.0.0:${PORT}`);
+    console.log(`Server running at http://0.0.0.0:${PORT}`);
   });
 }
 

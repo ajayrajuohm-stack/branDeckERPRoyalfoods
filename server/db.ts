@@ -10,8 +10,3 @@ if (!process.env.DATABASE_URL) {
 // 🚀 Neon HTTP connection (Fast for Vercel API)
 export const sql = neon(process.env.DATABASE_URL);
 export const db = drizzle(sql, { schema });
-
-// 💤 Pooled connection (Kept for compatibility with session store)
-export const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
