@@ -6,9 +6,9 @@ import { format } from "date-fns";
 
 
 import { db } from "./db";
-import { getCurrentStock } from "./storage/stock";
+import { getCurrentStock } from "./stock";
 import { importPurchasesFromExcel, importSalesFromExcel } from "./import-transactions";
-import { cleanupTempFile } from "./utils/cleanup";
+import { cleanupTempFile } from "./cleanup";
 
 import {
   categories,
