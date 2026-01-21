@@ -7,6 +7,7 @@ var __export = (target, all) => {
 // api/index.ts
 import "dotenv/config";
 import express from "express";
+import { createServer } from "http";
 
 // api/routes.ts
 import multer from "multer";
@@ -3414,6 +3415,7 @@ function setupAuth(app2) {
 
 // api/index.ts
 import cors from "cors";
+console.log("Initializing API...");
 var app = express();
 app.use(cors({
   origin: true,
@@ -3456,6 +3458,16 @@ app.use((err, _req, res, _next) => {
 app.get("/api/health", (_req, res) => {
   res.status(200).json({ status: "ok" });
 });
+var PORT = Number(process.env.PORT) || 5e3;
+if (process.env.VERCEL) {
+  console.log("Running in Vercel mode (Serverless exported app)");
+} else {
+  console.log("Running in Local mode (Standalone server)");
+  const httpServer = createServer(app);
+  httpServer.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server running at http://0.0.0.0:${PORT}`);
+  });
+}
 var index_default = app;
 export {
   index_default as default
