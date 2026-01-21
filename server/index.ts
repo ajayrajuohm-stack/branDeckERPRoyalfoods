@@ -75,18 +75,25 @@ if (process.env.NODE_ENV === "production" && !process.env.VERCEL) {
 }
 
 /* -------------------- SERVER -------------------- */
-const PORT = Number(process.env.PORT) || 5000;
+// ✅ VERCEL ONLY - No traditional server needed!
+// Vercel handles all server infrastructure automatically
 
 // Health check endpoint
 app.get('/api/health', (_req, res) => {
-  res.status(200).json({ status: 'ok' });
+  res.status(200).json({ status: 'ok', environment: 'local-development' });
 });
 
-if (!process.env.VERCEL) {
+// ✅ LOCAL DEVELOPMENT ONLY
+// This listener is required for 'npm run dev' to work on your machine.
+// Vercel ignores this file and uses api/index.ts instead.
+if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
   const { createServer } = await import("http");
   const httpServer = createServer(app);
+  const PORT = Number(process.env.PORT) || 5000;
+
   httpServer.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running at http://0.0.0.0:${PORT}`);
+    console.log(`\n🚀 Local Server running at http://localhost:${PORT}`);
+    console.log(`📝 API available at http://localhost:${PORT}/api`);
   });
 }
 

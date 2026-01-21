@@ -7,7 +7,6 @@ var __export = (target, all) => {
 // api/index.ts
 import "dotenv/config";
 import express from "express";
-import { createServer } from "http";
 
 // api/routes.ts
 import multer from "multer";
@@ -16,7 +15,7 @@ import { eq, desc, sql as sql2, and, gte, lte, asc, inArray } from "drizzle-orm"
 import { format } from "date-fns";
 
 // api/db.ts
-import { neon } from "@neondatabase/serverless";
+import { neon, neonConfig } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
 
 // shared/schema.ts
@@ -474,10 +473,17 @@ var insertAdminSettingsSchema = createInsertSchema(adminSettings).omit({ id: tru
 
 // api/db.ts
 if (!process.env.DATABASE_URL) {
-  throw new Error("DATABASE_URL is not set");
+  throw new Error(
+    "\u274C DATABASE_URL is not set!\n\u{1F4A1} Get it from: https://neon.tech\n\u{1F4DD} Add it to Vercel: Dashboard \u2192 Settings \u2192 Environment Variables"
+  );
 }
+if (!process.env.DATABASE_URL.includes("neon.tech") && process.env.NODE_ENV === "production") {
+  console.warn("\u26A0\uFE0F Warning: DATABASE_URL does not appear to be a Neon connection string");
+}
+neonConfig.fetchConnectionCache = true;
 var sql = neon(process.env.DATABASE_URL);
 var db = drizzle(sql, { schema: schema_exports });
+console.log("\u2705 Database configured: Neon PostgreSQL (HTTP mode for Vercel)");
 
 // api/import-transactions.ts
 import XLSX from "xlsx";
@@ -3415,7 +3421,8 @@ function setupAuth(app2) {
 
 // api/index.ts
 import cors from "cors";
-console.log("Initializing API...");
+console.log("\u{1F680} Royal Foods ERP - Vercel Serverless + Neon PostgreSQL");
+console.log("\u{1F4CD} Environment:", process.env.NODE_ENV || "development");
 var app = express();
 app.use(cors({
   origin: true,
@@ -3456,18 +3463,16 @@ app.use((err, _req, res, _next) => {
   });
 });
 app.get("/api/health", (_req, res) => {
-  res.status(200).json({ status: "ok" });
-});
-var PORT = Number(process.env.PORT) || 5e3;
-if (process.env.VERCEL) {
-  console.log("Running in Vercel mode (Serverless exported app)");
-} else {
-  console.log("Running in Local mode (Standalone server)");
-  const httpServer = createServer(app);
-  httpServer.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running at http://0.0.0.0:${PORT}`);
+  res.status(200).json({
+    status: "ok",
+    platform: "Vercel Serverless",
+    database: "Neon PostgreSQL",
+    timestamp: (/* @__PURE__ */ new Date()).toISOString()
   });
-}
+});
+console.log("\u2705 Royal Foods ERP configured for Vercel Serverless + Neon PostgreSQL");
+console.log("\u{1F5C4}\uFE0F Database: Neon (HTTP mode)");
+console.log("\u{1F680} Platform: Vercel Serverless Functions");
 var index_default = app;
 export {
   index_default as default

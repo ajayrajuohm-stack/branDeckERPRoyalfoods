@@ -1,11 +1,12 @@
 import "dotenv/config";
 import express, { type Request, Response, NextFunction } from "express";
-import { createServer } from "http";
 import { registerRoutes } from "./routes";
 import { setupAuth } from "./auth";
 import cors from "cors";
 
-console.log("Initializing API...");
+// ✅ NEON + VERCEL ONLY CONFIGURATION
+console.log("🚀 Royal Foods ERP - Vercel Serverless + Neon PostgreSQL");
+console.log("📍 Environment:", process.env.NODE_ENV || 'development');
 
 const app = express();
 
@@ -72,20 +73,21 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
 
 // Health check endpoint
 app.get('/api/health', (_req, res) => {
-    res.status(200).json({ status: 'ok' });
+    res.status(200).json({ 
+        status: 'ok',
+        platform: 'Vercel Serverless',
+        database: 'Neon PostgreSQL',
+        timestamp: new Date().toISOString()
+    });
 });
 
-/* -------------------- SERVER STARTUP -------------------- */
-const PORT = Number(process.env.PORT) || 5000;
+/* -------------------- VERCEL SERVERLESS ONLY -------------------- */
+// ✅ This app runs ONLY on Vercel serverless
+// No traditional server startup needed!
+// Vercel automatically handles all HTTP requests
 
-if (process.env.VERCEL) {
-    console.log("Running in Vercel mode (Serverless exported app)");
-} else {
-    console.log("Running in Local mode (Standalone server)");
-    const httpServer = createServer(app);
-    httpServer.listen(PORT, "0.0.0.0", () => {
-        console.log(`Server running at http://0.0.0.0:${PORT}`);
-    });
-}
+console.log('✅ Royal Foods ERP configured for Vercel Serverless + Neon PostgreSQL');
+console.log('🗄️ Database: Neon (HTTP mode)');
+console.log('🚀 Platform: Vercel Serverless Functions');
 
 export default app;
