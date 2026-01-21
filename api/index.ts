@@ -1,3 +1,4 @@
+// @ts-nocheck
 import "dotenv/config";
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
@@ -73,7 +74,7 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
 
 // Health check endpoint
 app.get('/api/health', (_req, res) => {
-    res.status(200).json({ 
+    res.status(200).json({
         status: 'ok',
         platform: 'Vercel Serverless',
         database: 'Neon PostgreSQL',

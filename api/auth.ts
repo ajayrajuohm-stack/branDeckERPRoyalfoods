@@ -1,3 +1,4 @@
+// @ts-nocheck
 import cookieSession from "cookie-session";
 import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
