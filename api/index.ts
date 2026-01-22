@@ -59,6 +59,33 @@ app.use((req, res, next) => {
 // Auth setup
 setupAuth(app);
 
+// Debug route to check environment
+app.get("/api/debug", async (req, res) => {
+    try {
+        const hasDbUrl = !!process.env.DATABASE_URL;
+        let dbStatus = "Not connected";
+        let dbError = null;
+
+        try {
+            const { sql } = await import("./db");
+            await sql.getConnection().then(c => { c.release(); dbStatus = "Connected!"; });
+        } catch (e: any) {
+            dbStatus = "Connection Failed";
+            dbError = e.message;
+        }
+
+        res.json({
+            status: "online",
+            nodeVersion: process.version,
+            hasDbUrl,
+            dbStatus,
+            dbError
+        });
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 // API routes
 registerRoutes(null, app).catch(e => {
     console.error("Failed to register routes:", e);
