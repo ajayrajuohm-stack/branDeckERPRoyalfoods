@@ -1,8 +1,8 @@
 // @ts-nocheck
 import "dotenv/config";
 import express, { type Request, Response, NextFunction } from "express";
-import { registerRoutes } from "./routes";
-import { setupAuth } from "./auth";
+import { registerRoutes } from "./routes.js";
+import { setupAuth } from "./auth.js";
 import cors from "cors";
 
 // ✅ TIDB + VERCEL ONLY CONFIGURATION
