@@ -15,7 +15,7 @@ if (process.env.DATABASE_URL) {
       password: dbUrl.password,
       database: dbUrl.pathname.slice(1),
       port: parseInt(dbUrl.port) || 4000,
-      ssl: { rejectUnauthorized: false },
+      ssl: { rejectUnauthorized: true },
       waitForConnections: true,
       connectionLimit: 1,
       maxIdle: 1,
