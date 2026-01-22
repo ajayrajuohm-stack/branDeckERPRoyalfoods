@@ -34,7 +34,7 @@ import {
   customerPayments,
   stockTransfers,
   adminSettings,
-} from "../shared/schema";
+} from "./schema";
 
 
 /* =======================
