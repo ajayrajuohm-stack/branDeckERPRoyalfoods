@@ -25,10 +25,11 @@ export function setupAuth(app: Express) {
     app.use(cookieSession({
         name: 'session',
         keys: [process.env.SESSION_SECRET || 'erp-secret-key'],
-        maxAge: 24 * 60 * 60 * 1000, // 24 hours
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
+        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+        secure: true, // Vercel always uses HTTPS
+        sameSite: 'lax',
         httpOnly: true,
+        signed: true,
     }));
 
     // Polyfill for Passport 0.7+ compatibility with cookie-session
