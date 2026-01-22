@@ -2,5 +2,15 @@
   "name": "api",
   "version": "1.0.0",
   "type": "commonjs",
-  "main": "index.ts"
+  "main": "index.ts",
+  "dependencies": {
+    "mysql2": "^3.11.0",
+    "drizzle-orm": "^0.39.3",
+    "dotenv": "^16.4.5",
+    "cookie-session": "^2.1.0",
+    "passport": "^0.7.0",
+    "passport-local": "^1.0.0",
+    "express": "^4.19.2",
+    "cors": "^2.8.5"
+  }
 }
