@@ -11,6 +11,9 @@ console.log("📍 Environment:", process.env.NODE_ENV || 'development');
 
 const app = express();
 
+// CRITICAL: Trust Vercel's proxy for secure cookies to work
+app.set('trust proxy', 1);
+
 /* -------------------- TYPES -------------------- */
 declare module "http" {
     interface IncomingMessage {
