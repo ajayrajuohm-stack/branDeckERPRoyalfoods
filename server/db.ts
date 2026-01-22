@@ -26,6 +26,9 @@ try {
       password: decodeURIComponent(url.password),
       database: url.pathname.slice(1),
       port: parseInt(url.port) || 3306,
+      ssl: {
+        rejectUnauthorized: true
+      },
       waitForConnections: true,
       connectionLimit: 10,
       queueLimit: 0
