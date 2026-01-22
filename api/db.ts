@@ -1,5 +1,5 @@
 // @ts-nocheck
-import * as schema from "../shared/schema";
+import * as schema from "./schema";
 import { drizzle } from 'drizzle-orm/mysql2';
 import mysql from 'mysql2/promise';
 
@@ -10,36 +10,39 @@ if (!process.env.DATABASE_URL) {
 console.log(`🔌 Database Configuration (Vercel):`);
 console.log(`   URL: ${process.env.DATABASE_URL.split('@')[1] ? '***@' + process.env.DATABASE_URL.split('@')[1] : 'Hidden'}`);
 
-// Use connection string for TiDB Cloud with SSL
 let pool;
 try {
-  const dbUrl = process.env.DATABASE_URL!;
-
-  // TiDB Cloud requires SSL. If not present in URL, we add it.
-  // If it is present as a string object like ?ssl={"rejectUnauthorized":true}, 
-  // we need to make sure mysql2 can parse it.
-
-  const options: any = {
-    uri: dbUrl,
+  // TiDB Cloud robust connection config
+  const connectionConfig = {
+    uri: process.env.DATABASE_URL,
     waitForConnections: true,
-    connectionLimit: 1, // Keep it low for serverless
+    connectionLimit: 1, // Minimize connections in serverless
+    maxIdle: 1, // Close idle connections quickly
     queueLimit: 0,
     enableKeepAlive: true,
     keepAliveInitialDelay: 0,
+    ssl: {
+      rejectUnauthorized: true,
+      minVersion: 'TLSv1.2'
+    }
   };
 
-  // If the URL doesn't already have SSL params, and it's a cloud host, add them
-  if (!dbUrl.includes('ssl=') && (dbUrl.includes('tidbcloud.com') || dbUrl.includes('aws'))) {
-    options.ssl = {
-      rejectUnauthorized: true
-    };
-  }
+  // If the string already has ?ssl=... we might want to just use the string, 
+  // but explicitly setting the config object is safer for mysql2.
+  pool = mysql.createPool(connectionConfig);
 
-  pool = mysql.createPool(dbUrl.includes('ssl=') ? dbUrl : options);
-  console.log(`✅ MySQL Pool initialized for TiDB Cloud`);
+  // Test connection immediately but don't crash if it fails (lazy connect)
+  pool.getConnection()
+    .then(conn => {
+      console.log('✅ Connected to TiDB Cloud successfully');
+      conn.release();
+    })
+    .catch(err => {
+      console.error('⚠️ Initial connection check failed (will retry):', err.message);
+    });
+
 } catch (e) {
-  console.error("❌ Database initialization error:", e);
-  throw e;
+  console.error("❌ Pool creation error:", e);
 }
 
 const db = drizzle(pool, { schema, mode: 'default' });
