@@ -1,14 +1,14 @@
 {
     "version": 2,
     "functions": {
-        "dist/api.js": {
-            "includeFiles": "dist/**"
+        "api/index.ts": {
+            "includeFiles": "api/**"
         }
     },
     "rewrites": [
         {
             "source": "/api/(.*)",
-            "destination": "/dist/api.js"
+            "destination": "/api/index.ts"
         },
         {
             "source": "/(.*)",
