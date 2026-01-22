@@ -67,20 +67,15 @@ export function setupAuth(app: Express) {
     );
 
     passport.serializeUser((user, done) => {
-        done(null, (user as User).id);
+        // Store the entire user object (except password) in the cookie
+        const { password, ...userWithoutPassword } = user as User;
+        done(null, userWithoutPassword);
     });
 
-    passport.deserializeUser(async (id: number, done) => {
-        try {
-            const [user] = await db
-                .select()
-                .from(users)
-                .where(eq(users.id, id))
-                .limit(1);
-            done(null, user);
-        } catch (err) {
-            done(err);
-        }
+    passport.deserializeUser(async (user: any, done) => {
+        // User object is already in the cookie, no DB lookup needed
+        // This makes sessions work reliably in serverless
+        done(null, user);
     });
 
     app.post("/api/register", async (req, res, next) => {
