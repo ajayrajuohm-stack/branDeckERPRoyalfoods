@@ -1,6 +1,6 @@
 // @ts-nocheck
-import { db } from "../db";
-import { stockLedger } from "@shared/schema";
+import { db } from "./db.js";
+import { stockLedger } from "./schema.js";
 import { sql } from "drizzle-orm";
 
 /**

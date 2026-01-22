@@ -6,10 +6,10 @@ import { eq, desc, sql, and, gte, lte, asc, inArray } from "drizzle-orm";
 import { format } from "date-fns";
 
 
-import { db } from "./db";
-import { getCurrentStock } from "./stock";
-import { importPurchasesFromExcel, importSalesFromExcel } from "./import-transactions";
-import { cleanupTempFile } from "./cleanup";
+import { db } from "./db.js";
+import { getCurrentStock } from "./stock.js";
+import { importPurchasesFromExcel, importSalesFromExcel } from "./import-transactions.js";
+import { cleanupTempFile } from "./cleanup.js";
 
 import {
   categories,

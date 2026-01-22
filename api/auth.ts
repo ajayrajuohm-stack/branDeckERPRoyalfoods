@@ -4,8 +4,8 @@ import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
 import express, { type Express } from "express";
 import { scryptSync, randomBytes, timingSafeEqual } from "crypto";
-import { users, type User } from "./schema";
-import { db } from "./db";
+import { users, type User } from "./schema.js";
+import { db } from "./db.js";
 import { eq } from "drizzle-orm";
 
 async function hashPassword(password: string) {
