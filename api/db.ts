@@ -12,24 +12,9 @@ console.log(`   URL: ${process.env.DATABASE_URL.split('@')[1] ? '***@' + process
 
 let pool;
 try {
-  // TiDB Cloud robust connection config
-  const connectionConfig = {
-    uri: process.env.DATABASE_URL,
-    waitForConnections: true,
-    connectionLimit: 1, // Minimize connections in serverless
-    maxIdle: 1, // Close idle connections quickly
-    queueLimit: 0,
-    enableKeepAlive: true,
-    keepAliveInitialDelay: 0,
-    ssl: {
-      rejectUnauthorized: true,
-      minVersion: 'TLSv1.2'
-    }
-  };
-
-  // If the string already has ?ssl=... we might want to just use the string, 
-  // but explicitly setting the config object is safer for mysql2.
-  pool = mysql.createPool(connectionConfig);
+  // Simplest, most robust way for TiDB: Pass the URL string directly.
+  // The ?ssl={"rejectUnauthorized":true} part is parsed better this way by some driver versions.
+  pool = mysql.createPool(process.env.DATABASE_URL);
 
   // Test connection immediately but don't crash if it fails (lazy connect)
   pool.getConnection()
