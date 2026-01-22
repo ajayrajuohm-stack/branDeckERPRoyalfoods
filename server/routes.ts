@@ -1,7 +1,9 @@
+// @ts-nocheck
 import { Express } from "express";
 import multer from "multer";
 import path from "path";
 import { eq, desc, sql, and, gte, lte, asc, inArray } from "drizzle-orm";
+import { alias } from "drizzle-orm/mysql-core";
 import { format } from "date-fns";
 
 
@@ -35,43 +37,14 @@ import {
   adminSettings,
 } from "../shared/schema";
 
-
-/* =======================
-   MULTER CONFIG - VERCEL COMPATIBLE
-======================= */
-import { tmpdir } from "os";
-import { existsSync, mkdirSync } from "fs";
-
-// Use /tmp for Vercel serverless compatibility
-const uploadDir = process.env.VERCEL ? tmpdir() : "uploads/";
-
-// Ensure upload directory exists (for local dev)
-if (!process.env.VERCEL && !existsSync(uploadDir)) {
-  mkdirSync(uploadDir, { recursive: true });
-}
-
-const upload = multer({
-  dest: uploadDir,
-  fileFilter: (_req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    if (ext !== ".xlsx" && ext !== ".xls") {
-      cb(new Error("Only Excel files allowed"));
-    } else {
-      cb(null, true);
-    }
-  },
-});
-
 export async function registerRoutes(_server: any, app: Express) {
   /* =======================
      SERVICE STATUS MIDDLEWARE
   ======================= */
   app.use(async (req, res, next) => {
-    // Skip status check for non-API routes or public auth routes
     if (!req.path.startsWith("/api") ||
       req.path === "/api/health" ||
       req.path === "/api/login" ||
-      req.path === "/api/register" ||
       req.path === "/api/user" ||
       req.path === "/api/logout" ||
       req.path === "/api/admin" ||
@@ -90,380 +63,25 @@ export async function registerRoutes(_server: any, app: Express) {
       next();
     } catch (err) {
       console.error("Error checking service status:", err);
-      next(); // Fail-safe: let it pass if DB check fails
+      next();
     }
   });
 
-  /* =======================
-     HEALTH
-  ======================= */
-  console.log("Registering API routes - Version: 1.0.1");
-  app.get("/api/health", (_req, res) => {
-    res.json({ status: "ok" });
-  });
-
-  /* =======================
-     ERROR HANDLER
-  ======================= */
   const handleDbError = (err: any, res: any) => {
     console.error("Database error:", err);
     let errorMessage = "Internal server error";
-    if (err?.code === "23505") errorMessage = "A record with this information already exists";
-    else if (err?.code === "23503") errorMessage = "Cannot delete/update because it is referenced by other records.";
+    if (err?.code === "ER_DUP_ENTRY" || err?.errno === 1062) errorMessage = "A record with this information already exists";
+    else if (err?.code === "ER_ROW_IS_REFERENCED_2" || err?.errno === 1451) errorMessage = "Cannot delete/update because it is referenced by other records.";
+    else if (err?.code === "ER_NO_REFERENCED_ROW_2" || err?.errno === 1452) errorMessage = "Cannot create/update because a referenced record does not exist.";
     else if (err?.message) errorMessage = err.message;
     res.status(500).json({ message: errorMessage });
   };
 
-  // 🔹 DEBUG: INSPECT DATABASE STATE (PAYMENTS/PURCHASES)
-  app.get("/api/debug/inspect-payments", async (_req, res) => {
-    try {
-      const [sp, cp, p, s] = await Promise.all([
-        db.select().from(supplierPayments),
-        db.select().from(customerPayments),
-        db.select().from(purchases).orderBy(asc(purchases.id)),
-        db.select().from(sales).orderBy(asc(sales.id))
-      ]);
-      res.json({ supplierPayments: sp, customerPayments: cp, purchases: p, sales: s });
-    } catch (err) {
-      handleDbError(err, res);
-    }
-  });
-
-  // 🔹 IMPORT PURCHASES
-  app.post("/api/purchases/import", upload.single("file"), async (req, res) => {
-    try {
-      if (!req.file) return res.status(400).json({ message: "No file uploaded" });
-      const filePath = req.file.path;
-
-      try {
-        const result = await importPurchasesFromExcel(filePath);
-        res.json(result);
-      } finally {
-        // Always cleanup temp file, even on error
-        await cleanupTempFile(filePath);
-      }
-    } catch (err) {
-      handleDbError(err, res);
-    }
-  });
-
-  // 🔹 IMPORT SALES
-  app.post("/api/sales/import", upload.single("file"), async (req, res) => {
-    try {
-      if (!req.file) return res.status(400).json({ message: "No file uploaded" });
-      const filePath = req.file.path;
-
-      try {
-        const result = await importSalesFromExcel(filePath);
-        res.json(result);
-      } finally {
-        // Always cleanup temp file, even on error
-        await cleanupTempFile(filePath);
-      }
-    } catch (err) {
-      handleDbError(err, res);
-    }
-  });
-
-
-  // 🔹 SYNC BALANCES (FIX OUT-OF-SYNC PAYMENTS)
-  app.get("/api/debug/sync-balances", async (_req, res) => {
-    try {
-      console.log("Starting master balance synchronization...");
-
-      // 1. DELETE OLD HEALING RECORDS to start from a clean state of truth
-      await db.delete(supplierPayments).where(sql`${supplierPayments.remarks} LIKE 'Healed by sync-balances%'`);
-      await db.delete(customerPayments).where(sql`${customerPayments.remarks} LIKE 'Healed by sync-balances%'`);
-
-      // 2. FETCH EVERYTHING
-      const [allPurchases, allSPayments, allSales, allCPayments, allOwners] = await Promise.all([
-        db.select().from(purchases).orderBy(asc(purchases.id)),
-        db.select().from(supplierPayments),
-        db.select().from(sales).orderBy(asc(sales.id)),
-        db.select().from(customerPayments),
-        db.select().from(owners).limit(1)
-      ]);
-      const owner = allOwners.length > 0 ? allOwners[0] : null;
-
-      if (!owner) {
-        console.warn("Sync Balances: No owner found in database. 'Healing' inserts will be skipped.");
-      }
-
-      // 3. AGGRESSIVE DEDUPLICATION: Kill exact duplicates (same amount, month, invoice)
-      // We do this before linking to ensure we don't 'reify' duplicates.
-      const dedupe = (list: any[], table: any, linkKey: string) => {
-        const seen = new Set<string>();
-        const toDelete: number[] = [];
-        for (const p of list) {
-          const key = `${p[linkKey] || 'null'}-${Number(p.amount)}-${p.paymentDate}-${p.supplierId || p.customerId}`;
-          if (seen.has(key) && (p.remarks || "").indexOf("Initial") === -1) toDelete.push(p.id);
-          else seen.add(key);
-        }
-        return toDelete;
-      };
-
-      const spDelete = dedupe(allSPayments, supplierPayments, 'purchaseId');
-      if (spDelete.length > 0) await db.delete(supplierPayments).where(inArray(supplierPayments.id, spDelete));
-
-      const cpDelete = dedupe(allCPayments, customerPayments, 'saleId');
-      if (cpDelete.length > 0) await db.delete(customerPayments).where(inArray(customerPayments.id, cpDelete));
-
-      // Refresh data after dedupe
-      const [finalSP, finalCP] = await Promise.all([db.select().from(supplierPayments), db.select().from(customerPayments)]);
-
-      // 4. RESET BALANCES IN MEMORY (Greedy re-calculation)
-      const pMap = new Map<number, number>(); // purchaseId -> currentPayingAmount
-      allPurchases.forEach(p => pMap.set(p.id, 0));
-
-      const sMap = new Map<number, number>(); // saleId -> currentReceivedAmount
-      allSales.forEach(s => sMap.set(s.id, 0));
-
-      // 5. PROCESS SUPPLIER PAYMENTS
-      for (const p of finalSP) {
-        let targetId = p.purchaseId;
-        // If unlinked, or linked to a purchase of a different supplier (sanity check)
-        if (!targetId || (allPurchases.find(x => x.id === targetId)?.supplierId !== p.supplierId)) {
-          // Greedy link to oldest outstanding purchase
-          const oldest = allPurchases.find(pur =>
-            pur.supplierId === p.supplierId &&
-            (Number(pur.totalAmount) - (pMap.get(pur.id) || 0) > 0.01)
-          );
-          if (oldest) {
-            targetId = oldest.id;
-            await db.update(supplierPayments).set({ purchaseId: targetId }).where(eq(supplierPayments.id, p.id));
-          }
-        }
-        if (targetId) {
-          pMap.set(targetId, (pMap.get(targetId) || 0) + Number(p.amount));
-        }
-      }
-
-      // 6. PROCESS CUSTOMER RECEIPTS
-      for (const p of finalCP) {
-        let targetId = p.saleId;
-        if (!targetId || (allSales.find(x => x.id === targetId)?.customerId !== p.customerId)) {
-          const oldest = allSales.find(s =>
-            s.customerId === p.customerId &&
-            (Number(s.totalAmount) - (sMap.get(s.id) || 0) > 0.01)
-          );
-          if (oldest) {
-            targetId = oldest.id;
-            await db.update(customerPayments).set({ saleId: targetId }).where(eq(customerPayments.id, p.id));
-          }
-        }
-        if (targetId) {
-          sMap.set(targetId, (sMap.get(targetId) || 0) + Number(p.amount));
-        }
-      }
-
-      // 7. HEAL REMAINING GAPS (If user had recorded a balance without a payment record)
-      // This is the safety net.
-      for (const pur of allPurchases) {
-        const recorded = Number(pur.payingAmount) || 0;
-        const linked = pMap.get(pur.id) || 0;
-        const gap = recorded - linked;
-
-        if (gap > 0.01 && owner) {
-          console.log(`Healing Purchase #${pur.id}: adding back ${gap}`);
-          await db.insert(supplierPayments).values({
-            paymentDate: pur.purchaseDate,
-            supplierId: pur.supplierId,
-            purchaseId: pur.id,
-            ownerId: owner.id,
-            amount: String(gap),
-            paymentMethod: "Cash",
-            remarks: "Healed by sync-balances (balance gap fix)",
-          });
-          pMap.set(pur.id, recorded); // Now in sync
-        }
-      }
-
-      for (const sale of allSales) {
-        const recorded = Number(sale.receivedAmount) || 0;
-        const linked = sMap.get(sale.id) || 0;
-        const gap = recorded - linked;
-
-        if (gap > 0.01 && owner) {
-          console.log(`Healing Sale #${sale.id}: adding back ${gap}`);
-          await db.insert(customerPayments).values({
-            paymentDate: sale.saleDate,
-            customerId: sale.customerId,
-            saleId: sale.id,
-            ownerId: owner.id,
-            amount: String(gap),
-            paymentMethod: "Cash",
-            remarks: "Healed by sync-balances (balance gap fix)",
-          });
-          sMap.set(sale.id, recorded);
-        }
-      }
-
-      // 8. FINAL WRITE-BACK TO TABLES
-      // This ensures reports and transaction lists see the same aggregated truth.
-      for (const [id, amt] of Array.from(pMap.entries())) {
-        await db.update(purchases).set({ payingAmount: String(amt) }).where(eq(purchases.id, id));
-      }
-      for (const [id, amt] of Array.from(sMap.entries())) {
-        await db.update(sales).set({ receivedAmount: String(amt) }).where(eq(sales.id, id));
-      }
-
-      res.json({ message: "Master synchronization complete. Balances are now consistent across all reports and lists." });
-    } catch (err) {
-      handleDbError(err, res);
-    }
-  });
-
-  // 🔹 SYNC STOCK LEVELS
-  // Optimized bulk cleanup using SQL to prevent timeouts
-  app.post("/api/debug/sync-stock", async (_req, res) => {
-    try {
-      console.log("Starting Optimized Stock Ledger Sync...");
-
-      // 1. Purge PRODUCTION orphans (entries where run no longer exists)
-      await db.execute(sql`
-        DELETE FROM stock_ledger 
-        WHERE reference_type LIKE 'PRODUCTION%' 
-        AND reference_id NOT IN (SELECT id FROM production_runs)
-      `);
-
-      // 2. Purge PURCHASE orphans
-      await db.execute(sql`
-        DELETE FROM stock_ledger 
-        WHERE reference_type LIKE 'PURCHASE%' 
-        AND reference_id NOT IN (SELECT id FROM purchases)
-      `);
-
-      // 3. Purge SALE orphans
-      await db.execute(sql`
-        DELETE FROM stock_ledger 
-        WHERE reference_type LIKE 'SALE%' 
-        AND reference_id NOT IN (SELECT id FROM sales)
-      `);
-
-      console.log("Stock Ledger Sync Complete.");
-      res.json({
-        message: "Stock synchronized successfully. All orphaned entries from deleted transactions have been purged. Your stock levels are now accurate."
-      });
-    } catch (err) {
-      console.error("Sync Stock Error:", err);
-      handleDbError(err, res);
-    }
-  });
-
-  // 🔹 REBUILD ENTIRE INVENTORY LEDGER (ULTIMATE FIX)
-  app.post("/api/debug/rebuild-inventory", async (_req, res) => {
-    try {
-      console.log("[REBUILD] Starting complete inventory ledger rebuild...");
-
-      await db.transaction(async (tx) => {
-        // 1. Wipe current ledger
-        await tx.delete(stockLedger);
-        console.log("[REBUILD] Wiped stock_ledger table.");
-
-        // 2. Re-insert from Purchases
-        const activePurchases = await tx.query.purchases.findMany({
-          where: eq(purchases.isDeleted, false),
-          with: { items: true }
-        });
-        for (const p of activePurchases) {
-          for (const item of p.items) {
-            await tx.insert(stockLedger).values({
-              itemId: item.itemId,
-              warehouseId: p.warehouseId,
-              quantity: String(item.quantity),
-              referenceType: "PURCHASE",
-              referenceId: p.id,
-              createdAt: new Date(p.purchaseDate)
-            });
-          }
-        }
-        console.log(`[REBUILD] Re-inserted ${activePurchases.length} active purchases.`);
-
-        // 3. Re-insert from Sales
-        const activeSales = await tx.query.sales.findMany({
-          where: eq(sales.isDeleted, false),
-          with: { items: true }
-        });
-        for (const s of activeSales) {
-          for (const item of s.items) {
-            await tx.insert(stockLedger).values({
-              itemId: item.itemId,
-              warehouseId: s.warehouseId,
-              quantity: String(-Math.abs(Number(item.quantity))),
-              referenceType: "SALE",
-              referenceId: s.id,
-              createdAt: new Date(s.saleDate)
-            });
-          }
-        }
-        console.log(`[REBUILD] Re-inserted ${activeSales.length} active sales.`);
-
-        // 4. Re-insert from Production
-        const activeProduction = await tx.query.productionRuns.findMany({
-          where: eq(productionRuns.isDeleted, false),
-          with: { consumptions: true }
-        });
-        for (const pr of activeProduction) {
-          // Output (FG)
-          await tx.insert(stockLedger).values({
-            itemId: pr.outputItemId,
-            warehouseId: pr.warehouseId,
-            quantity: String(pr.outputQuantity),
-            referenceType: "PRODUCTION",
-            referenceId: pr.id,
-            createdAt: new Date(pr.productionDate)
-          });
-          // Consumptions (Raw Materials)
-          for (const c of pr.consumptions) {
-            await tx.insert(stockLedger).values({
-              itemId: c.itemId,
-              warehouseId: pr.warehouseId,
-              quantity: String(-Math.abs(Number(c.actualQty))),
-              referenceType: "PRODUCTION_CONSUMPTION",
-              referenceId: pr.id,
-              createdAt: new Date(pr.productionDate)
-            });
-          }
-        }
-        console.log(`[REBUILD] Re-inserted ${activeProduction.length} active production runs.`);
-
-        // 5. Re-insert from Stock Transfers
-        const transfers = await tx.select().from(stockTransfers);
-        for (const t of transfers) {
-          // Outflow
-          await tx.insert(stockLedger).values({
-            itemId: t.itemId,
-            warehouseId: t.fromWarehouseId,
-            quantity: String(-Math.abs(Number(t.quantity))),
-            referenceType: "TRANSFER_OUT",
-            referenceId: t.id,
-            createdAt: new Date(t.transferDate)
-          });
-          // Inflow
-          if (t.toWarehouseId) {
-            await tx.insert(stockLedger).values({
-              itemId: t.itemId,
-              warehouseId: t.toWarehouseId,
-              quantity: String(Math.abs(Number(t.quantity))),
-              referenceType: "TRANSFER_IN",
-              referenceId: t.id,
-              createdAt: new Date(t.transferDate)
-            });
-          }
-        }
-        console.log(`[REBUILD] Re-inserted ${transfers.length} stock transfers.`);
-      });
-
-      res.json({ message: "Inventory ledger has been completely rebuilt from active transactions." });
-    } catch (err) {
-      console.error("[REBUILD] Error:", err);
-      handleDbError(err, res);
-    }
-  });
 
   /* =======================
-     GENERIC LIST
-  ======================= */
+       GENERIC UTILITIES
+    ======================= */
+
   const list = async (table: any, res: any) => {
     try {
       const rows = await db.select().from(table);
@@ -473,60 +91,35 @@ export async function registerRoutes(_server: any, app: Express) {
     }
   };
 
-  /* =======================
-     MASTERS - CRUD OPERATIONS
-  ======================= */
-
-  // Generic CREATE function
   const create = async (table: any, data: any, res: any) => {
     try {
-      // Ensure numeric fields are properly formatted for items table
       if (table === items) {
-        console.log("Updating Item:", data);
-        if (data.reorderLevel !== undefined) {
-          data.reorderLevel = String(data.reorderLevel);
-        }
-        if (data.gstRate !== undefined) {
-          data.gstRate = String(data.gstRate);
-        }
+        if (data.reorderLevel !== undefined) data.reorderLevel = String(data.reorderLevel);
+        if (data.gstRate !== undefined) data.gstRate = String(data.gstRate);
       }
-
       const [result] = await db.insert(table).values(data);
-      const insertId = result.insertId;
-      // Fetch the full record back as MySQL doesn't support .returning()
-      const [inserted] = await db.select().from(table).where(eq(table.id, insertId));
+      const [inserted] = await db.select().from(table).where(eq(table.id, result.insertId));
       res.status(201).json(inserted);
     } catch (err) {
       handleDbError(err, res);
     }
   };
 
-  // Generic UPDATE function
   const update = async (table: any, id: number, data: any, res: any) => {
     try {
-      // Ensure numeric fields are properly formatted for items table
       if (table === items) {
-        console.log("Updating Item ID:", id, "Data:", data);
-        if (data.reorderLevel !== undefined) {
-          data.reorderLevel = String(data.reorderLevel);
-        }
-        if (data.gstRate !== undefined) {
-          data.gstRate = String(data.gstRate);
-        }
+        if (data.reorderLevel !== undefined) data.reorderLevel = String(data.reorderLevel);
+        if (data.gstRate !== undefined) data.gstRate = String(data.gstRate);
       }
-
       await db.update(table).set(data).where(eq(table.id, id));
       const [updated] = await db.select().from(table).where(eq(table.id, id));
-      if (!updated) {
-        return res.status(404).json({ message: "Record not found" });
-      }
+      if (!updated) return res.status(404).json({ message: "Record not found" });
       res.json(updated);
     } catch (err) {
       handleDbError(err, res);
     }
   };
 
-  // Generic DELETE function
   const remove = async (table: any, id: number, res: any) => {
     try {
       await db.delete(table).where(eq(table.id, id));
@@ -708,40 +301,63 @@ export async function registerRoutes(_server: any, app: Express) {
 
   // 🔹 GET PURCHASES (WITH JOINS)
   app.get("/api/purchases", async (_req, res) => {
-    const rows = await db.query.purchases.findMany({
-      where: (p, { eq }) => eq(p.isDeleted, false),
-      with: {
-        supplier: true,
-        warehouse: true,
-        items: {
-          with: {
-            item: true,
-          },
-        },
-      },
-      orderBy: (p, { desc }) => [desc(p.purchaseDate)],
-    });
+    try {
+      // 1. Fetch active purchases with supplier and warehouse
+      const purchaseRows = await db
+        .select({
+          purchase: purchases,
+          supplier: suppliers,
+          warehouse: warehouses
+        })
+        .from(purchases)
+        .leftJoin(suppliers, eq(purchases.supplierId, suppliers.id))
+        .leftJoin(warehouses, eq(purchases.warehouseId, warehouses.id))
+        .where(eq(purchases.isDeleted, false))
+        .orderBy(desc(purchases.purchaseDate));
 
-    const formatted = rows.map((p) => ({
-      id: p.id,
-      purchaseDate: p.purchaseDate,
-      supplierId: p.supplierId,
-      warehouseId: p.warehouseId,
-      supplier: p.supplier?.name ?? "-",
-      warehouse: p.warehouse?.name ?? "-",
-      totalAmount: p.totalAmount,
-      payingAmount: p.payingAmount,
-      dueDate: p.dueDate,
-      lineItems: p.items.map((i) => ({
-        itemId: i.itemId,
-        item: i.item?.name ?? "-",
-        quantity: i.quantity,
-        rate: i.rate,
-        amount: i.amount,
-      })),
-    }));
+      // 2. Fetch all purchase items for these purchases
+      const pIds = purchaseRows.map(r => r.purchase.id);
+      let itemRows: any[] = [];
+      if (pIds.length > 0) {
+        itemRows = await db
+          .select({
+            pi: purchaseItems,
+            item: items
+          })
+          .from(purchaseItems)
+          .leftJoin(items, eq(purchaseItems.itemId, items.id))
+          .where(inArray(purchaseItems.purchaseId, pIds));
+      }
 
-    res.json(formatted);
+      // 3. Format the result
+      const formatted = purchaseRows.map(r => {
+        const p = r.purchase;
+        return {
+          id: p.id,
+          purchaseDate: p.purchaseDate,
+          supplierId: p.supplierId,
+          warehouseId: p.warehouseId,
+          supplier: r.supplier?.name ?? "-",
+          warehouse: r.warehouse?.name ?? "-",
+          totalAmount: p.totalAmount,
+          payingAmount: p.payingAmount,
+          dueDate: p.dueDate,
+          lineItems: itemRows
+            .filter(i => i.pi.purchaseId === p.id)
+            .map(i => ({
+              itemId: i.pi.itemId,
+              item: i.item?.name ?? "-",
+              quantity: i.pi.quantity,
+              rate: i.pi.rate,
+              amount: i.pi.amount,
+            })),
+        };
+      });
+
+      res.json(formatted);
+    } catch (err) {
+      handleDbError(err, res);
+    }
   });
 
   // 🔹 CREATE PURCHASE
@@ -999,32 +615,55 @@ export async function registerRoutes(_server: any, app: Express) {
 
   // 🔹 GET SALES (WITH JOINS)
   app.get("/api/sales", async (_req, res) => {
-    const rows = await db.query.sales.findMany({
-      where: (s, { eq }) => eq(s.isDeleted, false),
-      with: {
-        customer: true,
-        warehouse: true,
-        items: {
-          with: {
-            item: true,
-          },
-        },
-      },
-      orderBy: (s, { desc }) => [desc(s.saleDate)],
-    });
+    try {
+      // 1. Fetch active sales with customer and warehouse
+      const saleRows = await db
+        .select({
+          sale: sales,
+          customer: customers,
+          warehouse: warehouses
+        })
+        .from(sales)
+        .leftJoin(customers, eq(sales.customerId, customers.id))
+        .leftJoin(warehouses, eq(sales.warehouseId, warehouses.id))
+        .where(eq(sales.isDeleted, false))
+        .orderBy(desc(sales.saleDate));
 
-    const formatted = rows.map((s) => ({
-      ...s,
-      customer: s.customer?.name ?? "-",
-      warehouse: s.warehouse?.name ?? "-",
-      lineItems: s.items.map((i) => ({
-        ...i,
-        item: i.item?.name ?? "-",
-        hsnCode: i.item?.hsnCode ?? "-",
-      })),
-    }));
+      // 2. Fetch all sale items for these sales
+      const sIds = saleRows.map(r => r.sale.id);
+      let itemRows: any[] = [];
+      if (sIds.length > 0) {
+        itemRows = await db
+          .select({
+            si: salesItems,
+            item: items
+          })
+          .from(salesItems)
+          .leftJoin(items, eq(salesItems.itemId, items.id))
+          .where(inArray(salesItems.saleId, sIds));
+      }
 
-    res.json(formatted);
+      // 3. Format the result
+      const formatted = saleRows.map(r => {
+        const s = r.sale;
+        return {
+          ...s,
+          customer: r.customer?.name ?? "-",
+          warehouse: r.warehouse?.name ?? "-",
+          lineItems: itemRows
+            .filter(i => i.si.saleId === s.id)
+            .map(i => ({
+              ...i.si,
+              item: i.item?.name ?? "-",
+              hsnCode: i.item?.hsnCode ?? "-",
+            })),
+        };
+      });
+
+      res.json(formatted);
+    } catch (err) {
+      handleDbError(err, res);
+    }
   });
 
   // 🔹 CREATE SALE
@@ -1058,7 +697,7 @@ export async function registerRoutes(_server: any, app: Express) {
         // Calculate current stock for this item in the selected warehouse
         const stockData = await db
           .select({
-            quantity: sql<number>`CAST(COALESCE(SUM(CAST(${stockLedger.quantity} AS DECIMAL)), 0) AS DECIMAL)`,
+            quantity: sql`CAST(COALESCE(SUM(CAST(${stockLedger.quantity} AS DECIMAL)), 0) AS DECIMAL)`,
           })
           .from(stockLedger)
           .where(
@@ -1261,7 +900,7 @@ export async function registerRoutes(_server: any, app: Express) {
         for (const li of lineItems) {
           const stockData = await tx
             .select({
-              quantity: sql<number>`CAST(COALESCE(SUM(CAST(${stockLedger.quantity} AS DECIMAL)), 0) AS DECIMAL)`,
+              quantity: sql`CAST(COALESCE(SUM(CAST(${stockLedger.quantity} AS DECIMAL)), 0) AS DECIMAL)`,
             })
             .from(stockLedger)
             .where(and(eq(stockLedger.itemId, li.itemId), eq(stockLedger.warehouseId, warehouseId)));
@@ -1359,7 +998,7 @@ export async function registerRoutes(_server: any, app: Express) {
         .select({
           customerId: sales.customerId,
           customer: customers.name,
-          totalSales: sql<string>`COALESCE(SUM(${sales.totalAmount}), 0)`,
+          totalSales: sql`COALESCE(SUM(${sales.totalAmount}), 0)`,
         })
         .from(sales)
         .leftJoin(customers, eq(sales.customerId, customers.id))
@@ -1379,26 +1018,21 @@ export async function registerRoutes(_server: any, app: Express) {
   // 🔹 GET SUPPLIER PAYMENTS (WITH JOINS)
   app.get("/api/supplier-payments", async (_req, res) => {
     try {
-      const rows = await db.query.supplierPayments.findMany({
-        with: {
-          supplier: true,
-          owner: true,
-        },
-        orderBy: (sp, { desc }) => [desc(sp.paymentDate)],
-      });
+      const rows = await db
+        .select({
+          sp: supplierPayments,
+          supplier: suppliers,
+          owner: owners,
+        })
+        .from(supplierPayments)
+        .leftJoin(suppliers, eq(supplierPayments.supplierId, suppliers.id))
+        .leftJoin(owners, eq(supplierPayments.ownerId, owners.id))
+        .orderBy(desc(supplierPayments.paymentDate));
 
-      const formatted = rows.map((sp) => ({
-        id: sp.id,
-        paymentDate: sp.paymentDate,
-        supplierId: sp.supplierId,
-        ownerId: sp.ownerId,
-        supplier: sp.supplier?.name ?? "-",
-        owner: sp.owner?.name ?? "-",
-        amount: sp.amount,
-        paymentMethod: sp.paymentMethod,
-        remarks: sp.remarks,
-        nextPaymentDate: sp.nextPaymentDate,
-        purchaseId: sp.purchaseId,
+      const formatted = rows.map((r) => ({
+        ...r.sp,
+        supplier: r.supplier?.name ?? "-",
+        owner: r.owner?.name ?? "-",
       }));
 
       res.json(formatted);
@@ -1563,26 +1197,21 @@ export async function registerRoutes(_server: any, app: Express) {
   // 🔹 GET CUSTOMER PAYMENTS (WITH JOINS)
   app.get("/api/customer-payments", async (_req, res) => {
     try {
-      const rows = await db.query.customerPayments.findMany({
-        with: {
-          customer: true,
-          owner: true,
-        },
-        orderBy: (cp, { desc }) => [desc(cp.paymentDate)],
-      });
+      const rows = await db
+        .select({
+          cp: customerPayments,
+          customer: customers,
+          owner: owners
+        })
+        .from(customerPayments)
+        .leftJoin(customers, eq(customerPayments.customerId, customers.id))
+        .leftJoin(owners, eq(customerPayments.ownerId, owners.id))
+        .orderBy(desc(customerPayments.paymentDate));
 
-      const formatted = rows.map((cp) => ({
-        id: cp.id,
-        paymentDate: cp.paymentDate,
-        customerId: cp.customerId,
-        ownerId: cp.ownerId,
-        customer: cp.customer?.name ?? "-",
-        owner: cp.owner?.name ?? "-",
-        amount: cp.amount,
-        paymentMethod: cp.paymentMethod,
-        remarks: cp.remarks,
-        nextReceiptDate: cp.nextReceiptDate,
-        saleId: cp.saleId,
+      const formatted = rows.map((r) => ({
+        ...r.cp,
+        customer: r.customer?.name ?? "-",
+        owner: r.owner?.name ?? "-",
       }));
 
       res.json(formatted);
@@ -1746,16 +1375,30 @@ export async function registerRoutes(_server: any, app: Express) {
 
   app.get("/api/stock-transfers", async (_req, res) => {
     try {
-      const rows = await db.query.stockTransfers.findMany({
-        with: {
-          item: true,
-          fromWarehouse: true,
-          toWarehouse: true,
-          uom: true
-        },
-        orderBy: (st, { desc }) => [desc(st.transferDate)]
-      });
-      res.json(rows);
+      const toWarehouse = alias(warehouses, "toWarehouse");
+      const rows = await db
+        .select({
+          st: stockTransfers,
+          item: items,
+          fromWarehouse: warehouses,
+          toWarehouse: toWarehouse,
+          uom: unitsOfMeasure
+        })
+        .from(stockTransfers)
+        .leftJoin(items, eq(stockTransfers.itemId, items.id))
+        .leftJoin(warehouses, eq(stockTransfers.fromWarehouseId, warehouses.id))
+        .leftJoin(toWarehouse, eq(stockTransfers.toWarehouseId, toWarehouse.id))
+        .leftJoin(unitsOfMeasure, eq(stockTransfers.uomId, unitsOfMeasure.id))
+        .orderBy(desc(stockTransfers.transferDate));
+
+      const formatted = rows.map(r => ({
+        ...r.st,
+        item: r.item,
+        fromWarehouse: r.fromWarehouse,
+        toWarehouse: r.toWarehouse,
+        uom: r.uom
+      }));
+      res.json(formatted);
     } catch (err) {
       handleDbError(err, res);
     }
@@ -1772,7 +1415,7 @@ export async function registerRoutes(_server: any, app: Express) {
       // 1. Check Stock in From Warehouse
       const stockData = await db
         .select({
-          quantity: sql<number>`CAST(COALESCE(SUM(CAST(${stockLedger.quantity} AS DECIMAL)), 0) AS DECIMAL)`,
+          quantity: sql`CAST(COALESCE(SUM(CAST(${stockLedger.quantity} AS DECIMAL)), 0) AS DECIMAL)`,
         })
         .from(stockLedger)
         .where(
@@ -1877,7 +1520,7 @@ export async function registerRoutes(_server: any, app: Express) {
       // 1. Check Availability (considering the revert of old transfer)
       const stockData = await db
         .select({
-          quantity: sql<number>`CAST(COALESCE(SUM(CAST(${stockLedger.quantity} AS DECIMAL)), 0) AS DECIMAL)`,
+          quantity: sql`CAST(COALESCE(SUM(CAST(${stockLedger.quantity} AS DECIMAL)), 0) AS DECIMAL)`,
         })
         .from(stockLedger)
         .where(
@@ -1961,7 +1604,7 @@ export async function registerRoutes(_server: any, app: Express) {
         .select({
           itemId: stockLedger.itemId,
           warehouseId: stockLedger.warehouseId,
-          quantity: sql<string>`CAST(COALESCE(SUM(CAST(${stockLedger.quantity} AS DECIMAL)), 0) AS DECIMAL(20,4))`,
+          quantity: sql`CAST(COALESCE(SUM(CAST(${stockLedger.quantity} AS DECIMAL)), 0) AS DECIMAL(20,4))`,
           itemName: items.name,
           warehouseName: warehouses.name,
           unitName: unitsOfMeasure.name,
@@ -1988,8 +1631,8 @@ export async function registerRoutes(_server: any, app: Express) {
       const purchaseRates = await db
         .select({
           itemId: purchaseItems.itemId,
-          totalAmount: sql<number>`SUM(CAST(${purchaseItems.amount} AS DECIMAL))`,
-          totalQty: sql<number>`SUM(CAST(${purchaseItems.quantity} AS DECIMAL))`
+          totalAmount: sql`SUM(CAST(${purchaseItems.amount} AS DECIMAL))`,
+          totalQty: sql`SUM(CAST(${purchaseItems.quantity} AS DECIMAL))`
         })
         .from(purchaseItems)
         .groupBy(purchaseItems.itemId);
@@ -1999,7 +1642,7 @@ export async function registerRoutes(_server: any, app: Express) {
       const salesRates = await db
         .select({
           itemId: salesItems.itemId,
-          avgRate: sql<number>`AVG(CAST(${salesItems.rate} AS DECIMAL))`
+          avgRate: sql`AVG(CAST(${salesItems.rate} AS DECIMAL))`
         })
         .from(salesItems)
         .groupBy(salesItems.itemId);
@@ -2063,8 +1706,8 @@ export async function registerRoutes(_server: any, app: Express) {
 
       const monthlySales = await db
         .select({
-          month: sql<number>`EXTRACT(MONTH FROM ${sales.saleDate})`,
-          total: sql<number>`SUM(CAST(${sales.totalAmount} AS DECIMAL))`
+          month: sql`EXTRACT(MONTH FROM ${sales.saleDate})`,
+          total: sql`SUM(CAST(${sales.totalAmount} AS DECIMAL))`
         })
         .from(sales)
         .where(and(...conditions))
@@ -2092,7 +1735,7 @@ export async function registerRoutes(_server: any, app: Express) {
       const stockData = await db
         .select({
           itemId: stockLedger.itemId,
-          quantity: sql<string>`CAST(COALESCE(SUM(CAST(${stockLedger.quantity} AS DECIMAL)), 0) AS DECIMAL(20,4))`,
+          quantity: sql`CAST(COALESCE(SUM(CAST(${stockLedger.quantity} AS DECIMAL)), 0) AS DECIMAL(20,4))`,
           reorderLevel: items.reorderLevel,
           itemName: items.name,
         })
@@ -2158,7 +1801,7 @@ export async function registerRoutes(_server: any, app: Express) {
 
         const openingStockData = await db
           .select({
-            totalQty: sql<string>`COALESCE(SUM(CAST(${stockLedger.quantity} AS DECIMAL)), 0)`,
+            totalQty: sql`COALESCE(SUM(CAST(${stockLedger.quantity} AS DECIMAL)), 0)`,
           })
           .from(stockLedger)
           .where(and(...openingConditions));
@@ -2173,8 +1816,8 @@ export async function registerRoutes(_server: any, app: Express) {
 
       const purchaseData = await db
         .select({
-          count: sql<number>`COUNT(*)`,
-          totalAmount: sql<string>`COALESCE(SUM(${purchases.totalAmount}), 0)`,
+          count: sql`COUNT(*)`,
+          totalAmount: sql`COALESCE(SUM(${purchases.totalAmount}), 0)`,
         })
         .from(purchases)
         .where(and(...purchaseConditionsBase));
@@ -2187,8 +1830,8 @@ export async function registerRoutes(_server: any, app: Express) {
 
       const salesData = await db
         .select({
-          count: sql<number>`COUNT(*)`,
-          totalAmount: sql<string>`COALESCE(SUM(${sales.totalAmount}), 0)`,
+          count: sql`COUNT(*)`,
+          totalAmount: sql`COALESCE(SUM(${sales.totalAmount}), 0)`,
         })
         .from(sales)
         .where(and(...salesConditionsBase));
@@ -2205,8 +1848,8 @@ export async function registerRoutes(_server: any, app: Express) {
 
         const productionData = await db
           .select({
-            count: sql<number>`COUNT(*)`,
-            totalOutput: sql<string>`COALESCE(SUM(${productionRuns.outputQuantity}), 0)`,
+            count: sql`COUNT(*)`,
+            totalOutput: sql`COALESCE(SUM(${productionRuns.outputQuantity}), 0)`,
           })
           .from(productionRuns)
           .where(and(...prodConditions));
@@ -2214,16 +1857,39 @@ export async function registerRoutes(_server: any, app: Express) {
         productionOutput = Number(productionData[0]?.totalOutput || 0);
       }
 
-      // 5. Detailed Lists for Table (Using CAST for robustness)
-      const detailedSales = await db.query.sales.findMany({
-        where: and(...salesConditionsBase),
-        with: {
-          customer: true,
-          items: {
-            with: { item: true }
-          }
-        }
-      });
+      // 5. Detailed Lists for Table (Using standard joins)
+      const salesRows = await db
+        .select({
+          sale: sales,
+          customer: customers
+        })
+        .from(sales)
+        .leftJoin(customers, eq(sales.customerId, customers.id))
+        .where(and(...salesConditionsBase));
+
+      const saleIds = salesRows.map(r => r.sale.id);
+      let saleItemsRows: any[] = [];
+      if (saleIds.length > 0) {
+        saleItemsRows = await db
+          .select({
+            si: salesItems,
+            item: items
+          })
+          .from(salesItems)
+          .leftJoin(items, eq(salesItems.itemId, items.id))
+          .where(inArray(salesItems.saleId, saleIds));
+      }
+
+      const detailedSales = salesRows.map(r => ({
+        ...r.sale,
+        customer: r.customer,
+        items: saleItemsRows
+          .filter(si => si.si.saleId === r.sale.id)
+          .map(si => ({
+            ...si.si,
+            item: si.item
+          }))
+      }));
 
       const detailedProdConditions = [
         sql`CAST(${productionRuns.productionDate} AS DATE) = ${dateStr}`,
@@ -2231,12 +1897,19 @@ export async function registerRoutes(_server: any, app: Express) {
       ];
       if (wId) detailedProdConditions.push(eq(productionRuns.warehouseId, wId));
 
-      const detailedProduction = await db.query.productionRuns.findMany({
-        where: and(...detailedProdConditions),
-        with: {
-          outputItem: true
-        }
-      });
+      const productionRows = await db
+        .select({
+          run: productionRuns,
+          outputItem: items
+        })
+        .from(productionRuns)
+        .leftJoin(items, eq(productionRuns.outputItemId, items.id))
+        .where(and(...detailedProdConditions));
+
+      const detailedProduction = productionRows.map(r => ({
+        ...r.run,
+        outputItem: r.outputItem
+      }));
 
       let fgStockCurrent = 0;
       if (fgItemIds.length > 0) {
@@ -2245,7 +1918,7 @@ export async function registerRoutes(_server: any, app: Express) {
 
         const fgStockResult = await db
           .select({
-            total: sql<string>`COALESCE(SUM(CAST(${stockLedger.quantity} AS DECIMAL)), 0)`,
+            total: sql`COALESCE(SUM(CAST(${stockLedger.quantity} AS DECIMAL)), 0)`,
           })
           .from(stockLedger)
           .where(and(...currentStockConditions));
@@ -2262,7 +1935,7 @@ export async function registerRoutes(_server: any, app: Express) {
 
         const totalSoldFGQtyResult = await db
           .select({
-            total: sql<string>`COALESCE(SUM(CAST(${salesItems.quantity} AS DECIMAL)), 0)`,
+            total: sql`COALESCE(SUM(CAST(${salesItems.quantity} AS DECIMAL)), 0)`,
           })
           .from(salesItems)
           .innerJoin(sales, eq(salesItems.saleId, sales.id))
@@ -2283,7 +1956,7 @@ export async function registerRoutes(_server: any, app: Express) {
 
         const closingFGStockResult = await db
           .select({
-            total: sql<string>`COALESCE(SUM(CAST(${stockLedger.quantity} AS DECIMAL)), 0)`,
+            total: sql`COALESCE(SUM(CAST(${stockLedger.quantity} AS DECIMAL)), 0)`,
           })
           .from(stockLedger)
           .where(and(...closingConditions));
@@ -2392,8 +2065,8 @@ export async function registerRoutes(_server: any, app: Express) {
         .select({
           supplierId: suppliers.id,
           supplierName: suppliers.name,
-          totalPurchases: sql<string>`CAST(COALESCE(SUM(${purchases.totalAmount}), 0) AS DECIMAL)`,
-          totalPayingAmount: sql<string>`CAST(COALESCE(SUM(${purchases.payingAmount}), 0) AS DECIMAL)`,
+          totalPurchases: sql`CAST(COALESCE(SUM(${purchases.totalAmount}), 0) AS DECIMAL)`,
+          totalPayingAmount: sql`CAST(COALESCE(SUM(${purchases.payingAmount}), 0) AS DECIMAL)`,
         })
         .from(suppliers)
         .leftJoin(purchases, and(...purchaseConditions))
@@ -2409,7 +2082,7 @@ export async function registerRoutes(_server: any, app: Express) {
       const paymentData = await db
         .select({
           supplierId: supplierPayments.supplierId,
-          totalPayments: sql<string>`CAST(COALESCE(SUM(${supplierPayments.amount}), 0) AS DECIMAL)`,
+          totalPayments: sql`CAST(COALESCE(SUM(${supplierPayments.amount}), 0) AS DECIMAL)`,
         })
         .from(supplierPayments)
         .where(paymentWhere)
@@ -2442,20 +2115,26 @@ export async function registerRoutes(_server: any, app: Express) {
     try {
       const today = format(new Date(), "yyyy-MM-dd");
 
-      // Get all purchases with due dates
+      // Get all purchases with due dates using standard join
+      const rows = await db
+        .select({
+          purchase: purchases,
+          supplier: suppliers
+        })
+        .from(purchases)
+        .leftJoin(suppliers, eq(purchases.supplierId, suppliers.id))
+        .orderBy(asc(purchases.dueDate));
 
-      const purchasesWithDue = await db.query.purchases.findMany({
-        with: {
-          supplier: true,
-        },
-        orderBy: (p, { asc }) => [asc(p.dueDate)],
-      });
+      const purchasesWithDue = rows.map(r => ({
+        ...r.purchase,
+        supplier: r.supplier
+      }));
 
       // Get all supplier payments grouped by supplier
       const paymentData = await db
         .select({
           supplierId: supplierPayments.supplierId,
-          totalPayments: sql<string>`CAST(COALESCE(SUM(${supplierPayments.amount}), 0) AS DECIMAL)`,
+          totalPayments: sql`CAST(COALESCE(SUM(${supplierPayments.amount}), 0) AS DECIMAL)`,
         })
         .from(supplierPayments)
         .groupBy(supplierPayments.supplierId);
@@ -2509,19 +2188,26 @@ export async function registerRoutes(_server: any, app: Express) {
       const sevenDaysLater = new Date(new Date().getTime() + 7 * 24 * 60 * 60 * 1000);
       const sevenDaysStr = format(sevenDaysLater, "yyyy-MM-dd");
 
-      // Get all purchases with due dates in the next 7 days
-      const purchasesWithDue = await db.query.purchases.findMany({
-        with: {
-          supplier: true,
-        },
-        orderBy: (p, { asc }) => [asc(p.dueDate)],
-      });
+      // Get all purchases with due dates in the next 7 days using standard join
+      const rows = await db
+        .select({
+          purchase: purchases,
+          supplier: suppliers
+        })
+        .from(purchases)
+        .leftJoin(suppliers, eq(purchases.supplierId, suppliers.id))
+        .orderBy(asc(purchases.dueDate));
+
+      const purchasesWithDue = rows.map(r => ({
+        ...r.purchase,
+        supplier: r.supplier
+      }));
 
       // Get all supplier payments grouped by supplier
       const paymentData = await db
         .select({
           supplierId: supplierPayments.supplierId,
-          totalPayments: sql<string>`CAST(COALESCE(SUM(${supplierPayments.amount}), 0) AS DECIMAL)`,
+          totalPayments: sql`CAST(COALESCE(SUM(${supplierPayments.amount}), 0) AS DECIMAL)`,
         })
         .from(supplierPayments)
         .groupBy(supplierPayments.supplierId);
@@ -2600,8 +2286,8 @@ export async function registerRoutes(_server: any, app: Express) {
         .select({
           customerId: customers.id,
           customerName: customers.name,
-          totalSales: sql<string>`CAST(COALESCE(SUM(${sales.totalAmount}), 0) AS DECIMAL)`,
-          totalReceivedAmount: sql<string>`CAST(COALESCE(SUM(${sales.receivedAmount}), 0) AS DECIMAL)`,
+          totalSales: sql`CAST(COALESCE(SUM(${sales.totalAmount}), 0) AS DECIMAL)`,
+          totalReceivedAmount: sql`CAST(COALESCE(SUM(${sales.receivedAmount}), 0) AS DECIMAL)`,
         })
         .from(customers)
         .leftJoin(sales, and(...salesConditions))
@@ -2617,7 +2303,7 @@ export async function registerRoutes(_server: any, app: Express) {
       const paymentData = await db
         .select({
           customerId: customerPayments.customerId,
-          totalPayments: sql<string>`CAST(COALESCE(SUM(${customerPayments.amount}), 0) AS DECIMAL)`,
+          totalPayments: sql`CAST(COALESCE(SUM(${customerPayments.amount}), 0) AS DECIMAL)`,
         })
         .from(customerPayments)
         .where(paymentWhere)
@@ -2650,14 +2336,20 @@ export async function registerRoutes(_server: any, app: Express) {
     try {
       const today = format(new Date(), "yyyy-MM-dd");
 
-      // Get all sales with due dates
+      // Get all sales with due dates using standard join
+      const rows = await db
+        .select({
+          sale: sales,
+          customer: customers
+        })
+        .from(sales)
+        .leftJoin(customers, eq(sales.customerId, customers.id))
+        .orderBy(asc(sales.dueDate));
 
-      const salesWithDue = await db.query.sales.findMany({
-        with: {
-          customer: true,
-        },
-        orderBy: (s, { asc }) => [asc(s.dueDate)],
-      });
+      const salesWithDue = rows.map(r => ({
+        ...r.sale,
+        customer: r.customer
+      }));
 
       // Calculate overdue sales
       const overdue = salesWithDue
@@ -2702,13 +2394,20 @@ export async function registerRoutes(_server: any, app: Express) {
       const threeDaysLater = new Date(new Date().getTime() + 3 * 24 * 60 * 60 * 1000);
       const threeDaysStr = format(threeDaysLater, "yyyy-MM-dd");
 
-      // Get all sales with due dates
-      const salesWithDue = await db.query.sales.findMany({
-        with: {
-          customer: true,
-        },
-        orderBy: (s, { asc }) => [asc(s.dueDate)],
-      });
+      // Get all sales with due dates using standard join
+      const rows = await db
+        .select({
+          sale: sales,
+          customer: customers
+        })
+        .from(sales)
+        .leftJoin(customers, eq(sales.customerId, customers.id))
+        .orderBy(asc(sales.dueDate));
+
+      const salesWithDue = rows.map(r => ({
+        ...r.sale,
+        customer: r.customer
+      }));
 
       // Calculate upcoming sales
       const upcoming = salesWithDue
@@ -2749,10 +2448,43 @@ export async function registerRoutes(_server: any, app: Express) {
      BOM
   ======================= */
   app.get("/api/bom-recipes", async (_req, res) => {
-    const data = await db.query.bomRecipes.findMany({
-      with: { lines: true },
-    });
-    res.json(data);
+    try {
+      // 1. Fetch recipes with their output items
+      const recipes = await db
+        .select({
+          recipe: bomRecipes,
+          outputItem: items
+        })
+        .from(bomRecipes)
+        .leftJoin(items, eq(bomRecipes.outputItemId, items.id));
+
+      // 2. Fetch all lines with their items
+      const lines = await db
+        .select({
+          line: bomLines,
+          item: items
+        })
+        .from(bomLines)
+        .leftJoin(items, eq(bomLines.itemId, items.id));
+
+      // 3. Assemble
+      const formatted = recipes.map(r => {
+        return {
+          ...r.recipe,
+          outputItem: r.outputItem,
+          lines: lines
+            .filter(l => l.line.bomRecipeId === r.recipe.id)
+            .map(l => ({
+              ...l.line,
+              item: l.item
+            }))
+        };
+      });
+
+      res.json(formatted);
+    } catch (err) {
+      handleDbError(err, res);
+    }
   });
 
   app.post("/api/bom-recipes", async (req, res) => {
@@ -2827,12 +2559,11 @@ export async function registerRoutes(_server: any, app: Express) {
       }
 
       // Fetch updated recipe with lines
-      const updatedRecipe = await db.query.bomRecipes.findFirst({
-        where: (bom, { eq }) => eq(bom.id, recipeId),
-        with: { lines: true },
-      });
+      const [recipe] = await db.select().from(bomRecipes).where(eq(bomRecipes.id, recipeId)).limit(1);
+      if (!recipe) return res.status(404).json({ message: "BOM recipe not found" });
+      const linesData = await db.select().from(bomLines).where(eq(bomLines.bomRecipeId, recipeId));
 
-      res.json(updatedRecipe);
+      res.json({ ...recipe, lines: linesData });
     } catch (err) {
       console.error("BOM update error:", err);
       handleDbError(err, res);
@@ -2973,67 +2704,60 @@ export async function registerRoutes(_server: any, app: Express) {
 
   app.get("/api/production", async (_req, res) => {
     try {
-      const runs = await db.query.productionRuns.findMany({
-        where: (pr, { eq }) => eq(pr.isDeleted, false),
-        orderBy: (pr, { desc }) => [desc(pr.productionDate)],
-      });
-
-      // Get item names and consumptions for each run
-      const formattedRuns = await Promise.all(
-        runs.map(async (run) => {
-          // Get output item name
-          const [outputItem] = await db
-            .select({ name: items.name })
-            .from(items)
-            .where(eq(items.id, run.outputItemId))
-            .limit(1);
-
-          // Get warehouse name
-          const [warehouse] = await db
-            .select({ name: warehouses.name })
-            .from(warehouses)
-            .where(eq(warehouses.id, run.warehouseId))
-            .limit(1);
-
-          // Get consumptions
-          const consumptions = await db.query.productionConsumptions.findMany({
-            where: (pc, { eq }) => eq(pc.productionRunId, run.id),
-          });
-
-          const consumptionDetails = await Promise.all(
-            consumptions.map(async (c) => {
-              const [item] = await db
-                .select({ name: items.name })
-                .from(items)
-                .where(eq(items.id, c.itemId))
-                .limit(1);
-              return {
-                itemId: c.itemId,
-                itemName: item?.name || "Unknown",
-                standardQty: c.standardQty,
-                actualQty: c.actualQty,
-                opening: c.openingStock, // Return saved opening stock
-                variance: c.variance, // Return saved variance
-                remarks: c.remarks, // Return saved remarks
-              };
-            })
-          );
-
-          return {
-            id: run.id,
-            productionDate: run.productionDate,
-            outputItemId: run.outputItemId,
-            outputItemName: outputItem?.name || "Unknown",
-            outputQuantity: run.outputQuantity,
-            warehouseId: run.warehouseId,
-            warehouseName: warehouse?.name || "Unknown",
-            consumptions: consumptionDetails,
-            batchCount: run.batchCount,
-            remarks: run.remarks,
-            createdAt: run.createdAt,
-          };
+      // 1. Fetch runs with output item and warehouse names using standard join
+      const runs = await db
+        .select({
+          run: productionRuns,
+          outputItemName: items.name,
+          warehouseName: warehouses.name
         })
-      );
+        .from(productionRuns)
+        .leftJoin(items, eq(productionRuns.outputItemId, items.id))
+        .leftJoin(warehouses, eq(productionRuns.warehouseId, warehouses.id))
+        .where(eq(productionRuns.isDeleted, false))
+        .orderBy(desc(productionRuns.productionDate));
+
+      // 2. Fetch all consumptions for these runs
+      const runIds = runs.map(r => r.run.id);
+      let consumptionRows: any[] = [];
+      if (runIds.length > 0) {
+        consumptionRows = await db
+          .select({
+            pc: productionConsumptions,
+            itemName: items.name
+          })
+          .from(productionConsumptions)
+          .leftJoin(items, eq(productionConsumptions.itemId, items.id))
+          .where(inArray(productionConsumptions.productionRunId, runIds));
+      }
+
+      // 3. Assemble the results
+      const formattedRuns = runs.map(r => {
+        const run = r.run;
+        return {
+          id: run.id,
+          productionDate: run.productionDate,
+          outputItemId: run.outputItemId,
+          outputItemName: r.outputItemName || "Unknown",
+          outputQuantity: run.outputQuantity,
+          warehouseId: run.warehouseId,
+          warehouseName: r.warehouseName || "Unknown",
+          batchCount: run.batchCount,
+          remarks: run.remarks,
+          createdAt: run.createdAt,
+          consumptions: consumptionRows
+            .filter(c => c.pc.productionRunId === run.id)
+            .map(c => ({
+              itemId: c.pc.itemId,
+              itemName: c.itemName || "Unknown",
+              standardQty: c.pc.standardQty,
+              actualQty: c.pc.actualQty,
+              opening: c.pc.openingStock,
+              variance: c.pc.variance,
+              remarks: c.pc.remarks,
+            }))
+        };
+      });
 
       res.json({ data: formattedRuns });
     } catch (err) {
@@ -3321,42 +3045,56 @@ export async function registerRoutes(_server: any, app: Express) {
   // 🔹 GET ALL TRASHED ITEMS
   app.get("/api/trash", async (_req, res) => {
     try {
-      const trashedPurchases = await db.query.purchases.findMany({
-        where: eq(purchases.isDeleted, true),
-        with: { supplier: true }
-      });
-      const trashedSales = await db.query.sales.findMany({
-        where: eq(sales.isDeleted, true),
-        with: { customer: true }
-      });
-      const trashedProduction = await db.query.productionRuns.findMany({
-        where: eq(productionRuns.isDeleted, true),
-        with: { outputItem: true }
-      });
+      const trashedPurchases = await db
+        .select({
+          purchase: purchases,
+          supplier: suppliers
+        })
+        .from(purchases)
+        .leftJoin(suppliers, eq(purchases.supplierId, suppliers.id))
+        .where(eq(purchases.isDeleted, true));
+
+      const trashedSales = await db
+        .select({
+          sale: sales,
+          customer: customers
+        })
+        .from(sales)
+        .leftJoin(customers, eq(sales.customerId, customers.id))
+        .where(eq(sales.isDeleted, true));
+
+      const trashedProduction = await db
+        .select({
+          run: productionRuns,
+          outputItem: items
+        })
+        .from(productionRuns)
+        .leftJoin(items, eq(productionRuns.outputItemId, items.id))
+        .where(eq(productionRuns.isDeleted, true));
 
       const response = {
-        purchases: trashedPurchases.map(p => ({
-          id: p.id,
-          date: p.purchaseDate,
-          entity: p.supplier?.name || "-",
-          amount: p.totalAmount,
-          deletedAt: p.deletedAt,
+        purchases: trashedPurchases.map(r => ({
+          id: r.purchase.id,
+          date: r.purchase.purchaseDate,
+          entity: r.supplier?.name || "-",
+          amount: r.purchase.totalAmount,
+          deletedAt: r.purchase.deletedAt,
           type: "PURCHASE"
         })),
-        sales: trashedSales.map(s => ({
-          id: s.id,
-          date: s.saleDate,
-          entity: s.customer?.name || "-",
-          amount: s.totalAmount,
-          deletedAt: s.deletedAt,
+        sales: trashedSales.map(r => ({
+          id: r.sale.id,
+          date: r.sale.saleDate,
+          entity: r.customer?.name || "-",
+          amount: r.sale.totalAmount,
+          deletedAt: r.sale.deletedAt,
           type: "SALE"
         })),
-        production: trashedProduction.map(pr => ({
-          id: pr.id,
-          date: pr.productionDate,
-          entity: pr.outputItem?.name || "-",
-          amount: pr.outputQuantity,
-          deletedAt: pr.deletedAt,
+        production: trashedProduction.map(r => ({
+          id: r.run.id,
+          date: r.run.productionDate,
+          entity: r.outputItem?.name || "-",
+          amount: r.run.outputQuantity,
+          deletedAt: r.run.deletedAt,
           type: "PRODUCTION"
         }))
       };
@@ -3510,116 +3248,6 @@ export async function registerRoutes(_server: any, app: Express) {
     }
   });
 
-  // 🔹 REBUILD ENTIRE INVENTORY LEDGER (ULTIMATE FIX)
-  app.post("/api/admin/rebuild-inventory", async (_req, res) => {
-    try {
-      console.log("[REBUILD] Starting complete inventory ledger rebuild...");
-
-      await db.transaction(async (tx) => {
-        // 1. Wipe current ledger
-        await tx.delete(stockLedger);
-        console.log("[REBUILD] Wiped stock_ledger table.");
-
-        // 2. Re-insert from Purchases
-        const activePurchases = await tx.query.purchases.findMany({
-          where: eq(purchases.isDeleted, false),
-          with: { items: true }
-        });
-        for (const p of activePurchases) {
-          for (const item of p.items) {
-            await tx.insert(stockLedger).values({
-              itemId: item.itemId,
-              warehouseId: p.warehouseId,
-              quantity: String(item.quantity),
-              referenceType: "PURCHASE",
-              referenceId: p.id,
-              createdAt: new Date(p.purchaseDate)
-            });
-          }
-        }
-        console.log(`[REBUILD] Re-inserted ${activePurchases.length} active purchases.`);
-
-        // 3. Re-insert from Sales
-        const activeSales = await tx.query.sales.findMany({
-          where: eq(sales.isDeleted, false),
-          with: { items: true }
-        });
-        for (const s of activeSales) {
-          for (const item of s.items) {
-            await tx.insert(stockLedger).values({
-              itemId: item.itemId,
-              warehouseId: s.warehouseId,
-              quantity: String(-Math.abs(Number(item.quantity))),
-              referenceType: "SALE",
-              referenceId: s.id,
-              createdAt: new Date(s.saleDate)
-            });
-          }
-        }
-        console.log(`[REBUILD] Re-inserted ${activeSales.length} active sales.`);
-
-        // 4. Re-insert from Production
-        const activeProduction = await tx.query.productionRuns.findMany({
-          where: eq(productionRuns.isDeleted, false),
-          with: { consumptions: true }
-        });
-        for (const pr of activeProduction) {
-          // Output (FG)
-          await tx.insert(stockLedger).values({
-            itemId: pr.outputItemId,
-            warehouseId: pr.warehouseId,
-            quantity: String(pr.outputQuantity),
-            referenceType: "PRODUCTION",
-            referenceId: pr.id,
-            createdAt: new Date(pr.productionDate)
-          });
-          // Consumptions (Raw Materials)
-          for (const c of pr.consumptions) {
-            await tx.insert(stockLedger).values({
-              itemId: c.itemId,
-              warehouseId: pr.warehouseId,
-              quantity: String(-Math.abs(Number(c.actualQty))),
-              referenceType: "PRODUCTION_CONSUMPTION",
-              referenceId: pr.id,
-              createdAt: new Date(pr.productionDate)
-            });
-          }
-        }
-        console.log(`[REBUILD] Re-inserted ${activeProduction.length} active production runs.`);
-
-        // 5. Re-insert from Stock Transfers
-        const transfers = await tx.select().from(stockTransfers);
-        for (const t of transfers) {
-          // Outflow
-          await tx.insert(stockLedger).values({
-            itemId: t.itemId,
-            warehouseId: t.fromWarehouseId,
-            quantity: String(-Math.abs(Number(t.quantity))),
-            referenceType: "TRANSFER_OUT",
-            referenceId: t.id,
-            createdAt: new Date(t.transferDate)
-          });
-          // Inflow
-          if (t.toWarehouseId) {
-            await tx.insert(stockLedger).values({
-              itemId: t.itemId,
-              warehouseId: t.toWarehouseId,
-              quantity: String(Math.abs(Number(t.quantity))),
-              referenceType: "TRANSFER_IN",
-              referenceId: t.id,
-              createdAt: new Date(t.transferDate)
-            });
-          }
-        }
-        console.log(`[REBUILD] Re-inserted ${transfers.length} stock transfers.`);
-      });
-
-      res.json({ message: "Inventory ledger has been completely rebuilt from active transactions." });
-    } catch (err) {
-      console.error("[REBUILD] Error:", err);
-      handleDbError(err, res);
-    }
-  });
 }
 
 

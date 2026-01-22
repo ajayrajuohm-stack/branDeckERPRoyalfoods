@@ -45,8 +45,8 @@ export async function importSuppliersFromExcel(filePath: string) {
 
       await db
         .insert(suppliers)
-        .values(parsed)
-        .onConflictDoNothing(); // skips duplicates safely
+        .ignore()
+        .values(parsed);
 
       success++;
     } catch (err: any) {
