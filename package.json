@@ -115,7 +115,8 @@
     "@types/react": "^18.3.11",
     "@types/react-dom": "^18.3.1",
     "@types/xlsx": "^0.0.35",
-    "drizzle-kit": "^0.31.8"
+    "drizzle-kit": "^0.31.8",
+    "esbuild": "^0.27.2"
   },
   "overrides": {
     "drizzle-kit": {
