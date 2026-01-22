@@ -6,7 +6,9 @@
     "target": "ES2019",
     "noEmit": false,
     "allowImportingTsExtensions": false,
-    "esModuleInterop": true
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "strict": false
   },
   "include": [
     "**/*"
