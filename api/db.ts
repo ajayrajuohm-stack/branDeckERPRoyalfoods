@@ -12,9 +12,26 @@ console.log(`   URL: ${process.env.DATABASE_URL.split('@')[1] ? '***@' + process
 
 let pool;
 try {
-  // Simplest, most robust way for TiDB: Pass the URL string directly.
-  // The ?ssl={"rejectUnauthorized":true} part is parsed better this way by some driver versions.
-  pool = mysql.createPool(process.env.DATABASE_URL);
+  // Explicit SSL configuration for TiDB + Vercel
+  // We parse the URL manually to ensure we can inject the permissive SSL setting
+  const dbUrl = new URL(process.env.DATABASE_URL);
+
+  const connectionConfig = {
+    host: dbUrl.hostname,
+    user: dbUrl.username,
+    password: dbUrl.password,
+    database: dbUrl.pathname.slice(1),
+    port: parseInt(dbUrl.port) || 4000,
+    ssl: {
+      rejectUnauthorized: false // Bypass strict CA check for serverless compatibility
+    },
+    waitForConnections: true,
+    connectionLimit: 1,
+    maxIdle: 1,
+    enableKeepAlive: true
+  };
+
+  pool = mysql.createPool(connectionConfig);
 
   // Test connection immediately but don't crash if it fails (lazy connect)
   pool.getConnection()
