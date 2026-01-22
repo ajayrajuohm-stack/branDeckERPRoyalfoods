@@ -1,13 +1,13 @@
 {
   "extends": "../tsconfig.json",
   "compilerOptions": {
-    "baseUrl": "..",
-    "paths": {
-      "@shared/*": ["./shared/*"]
-    }
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "target": "ES2019",
+    "noEmit": false,
+    "esModuleInterop": true
   },
   "include": [
-    "**/*.ts",
-    "../shared/**/*.ts"
+    "**/*"
   ]
 }
