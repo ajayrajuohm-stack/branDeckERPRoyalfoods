@@ -5,8 +5,8 @@ import { registerRoutes } from "./routes";
 import { setupAuth } from "./auth";
 import cors from "cors";
 
-// ✅ NEON + VERCEL ONLY CONFIGURATION
-console.log("🚀 Royal Foods ERP - Vercel Serverless + Neon PostgreSQL");
+// ✅ TIDB + VERCEL ONLY CONFIGURATION
+console.log("🚀 Royal Foods ERP - Vercel Serverless + TiDB MySQL");
 console.log("📍 Environment:", process.env.NODE_ENV || 'development');
 
 const app = express();

@@ -10,29 +10,36 @@ if (!process.env.DATABASE_URL) {
 console.log(`🔌 Database Configuration (Vercel):`);
 console.log(`   URL: ${process.env.DATABASE_URL.split('@')[1] ? '***@' + process.env.DATABASE_URL.split('@')[1] : 'Hidden'}`);
 
+// Use connection string for TiDB Cloud with SSL
 let pool;
 try {
-  // Use the connection string directly if it contains SSL parameters
-  if (process.env.DATABASE_URL!.includes('ssl=')) {
-    pool = mysql.createPool(process.env.DATABASE_URL!);
-    console.log(`✅ MySQL Pool created using direct URI string (SSL enabled)`);
-  } else {
-    const url = new URL(process.env.DATABASE_URL!);
-    pool = mysql.createPool({
-      host: url.hostname || '127.0.0.1',
-      user: url.username,
-      password: decodeURIComponent(url.password),
-      database: url.pathname.slice(1),
-      port: parseInt(url.port) || 3306,
-      waitForConnections: true,
-      connectionLimit: 5, // Lower limit for serverless
-      queueLimit: 0
-    });
-    console.log(`✅ MySQL Pool created for database: ${url.pathname.slice(1)}`);
+  const dbUrl = process.env.DATABASE_URL!;
+
+  // TiDB Cloud requires SSL. If not present in URL, we add it.
+  // If it is present as a string object like ?ssl={"rejectUnauthorized":true}, 
+  // we need to make sure mysql2 can parse it.
+
+  const options: any = {
+    uri: dbUrl,
+    waitForConnections: true,
+    connectionLimit: 1, // Keep it low for serverless
+    queueLimit: 0,
+    enableKeepAlive: true,
+    keepAliveInitialDelay: 0,
+  };
+
+  // If the URL doesn't already have SSL params, and it's a cloud host, add them
+  if (!dbUrl.includes('ssl=') && (dbUrl.includes('tidbcloud.com') || dbUrl.includes('aws'))) {
+    options.ssl = {
+      rejectUnauthorized: true
+    };
   }
+
+  pool = mysql.createPool(dbUrl.includes('ssl=') ? dbUrl : options);
+  console.log(`✅ MySQL Pool initialized for TiDB Cloud`);
 } catch (e) {
-  console.error("❌ Failed to parse DATABASE_URL. Falling back to direct URI string.");
-  pool = mysql.createPool(process.env.DATABASE_URL!);
+  console.error("❌ Database initialization error:", e);
+  throw e;
 }
 
 const db = drizzle(pool, { schema, mode: 'default' });
