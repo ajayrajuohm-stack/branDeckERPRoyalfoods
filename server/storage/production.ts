@@ -46,15 +46,15 @@ export async function createEodProductionRun(input: {
        2. INSERT PRODUCTION RUN
     ============================ */
 
-    const [production] = await tx
+    const [result] = await tx
       .insert(productionRuns)
       .values({
-        productionDate: input.productionDate,
+        productionDate: input.productionDate as any,
         outputItemId: input.outputItemId,
         outputQuantity: input.outputQuantity.toString(),
         warehouseId: input.warehouseId,
-      })
-      .returning();
+      });
+    const production = { id: result.insertId };
 
     /* ===========================
        3. RAW MATERIAL CONSUMPTION

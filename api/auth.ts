@@ -101,13 +101,13 @@ export function setupAuth(app: Express) {
             }
 
             const hashedPassword = await hashPassword(password);
-            const [user] = await db
+            const [result] = await db
                 .insert(users)
                 .values({
                     username,
                     password: hashedPassword,
-                })
-                .returning();
+                });
+            const [user] = await db.select().from(users).where(eq(users.id, result.insertId));
 
             req.login(user, (err) => {
                 if (err) return next(err);

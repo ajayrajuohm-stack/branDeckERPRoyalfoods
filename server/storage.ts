@@ -16,11 +16,12 @@ export const storage = {
 
   async createCategory(data: any) {
     try {
-      const result = await db.insert(categories).values({
+      const [result] = await db.insert(categories).values({
         name: data.name,
         type: data.type ?? "RAW",
-      }).returning();
-      return Array.isArray(result) ? result[0] : result;
+      });
+      const [inserted] = await db.select().from(categories).where(eq(categories.id, result.insertId));
+      return inserted;
     } catch (err) {
       console.error("Error creating category:", err);
       throw err;
@@ -29,11 +30,10 @@ export const storage = {
 
   async updateCategory(id: number, data: any) {
     try {
-      const result = await db.update(categories)
+      await db.update(categories)
         .set(data)
-        .where(eq(categories.id, id))
-        .returning();
-      const updated = Array.isArray(result) ? result[0] : result;
+        .where(eq(categories.id, id));
+      const [updated] = await db.select().from(categories).where(eq(categories.id, id));
       if (!updated) {
         throw new Error("Category not found");
       }
@@ -65,8 +65,9 @@ export const storage = {
 
   async createUom(data: any) {
     try {
-      const result = await db.insert(unitsOfMeasure).values(data).returning();
-      return Array.isArray(result) ? result[0] : result;
+      const [result] = await db.insert(unitsOfMeasure).values(data);
+      const [inserted] = await db.select().from(unitsOfMeasure).where(eq(unitsOfMeasure.id, result.insertId));
+      return inserted;
     } catch (err) {
       console.error("Error creating UOM:", err);
       throw err;

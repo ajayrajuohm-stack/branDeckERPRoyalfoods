@@ -1,18 +1,13 @@
 {
-    "buildCommand": "npm run build",
-    "outputDirectory": "dist",
-    "functions": {
-        "api/index.ts": {
-            "includeFiles": "shared/**"
-        }
-    },
+    "version": 2,
+    "framework": "vite",
     "rewrites": [
         {
             "source": "/api/(.*)",
-            "destination": "/api"
+            "destination": "/api/index.ts"
         },
         {
-            "source": "/(.*)",
+            "source": "/(?!api/)(.*)",
             "destination": "/index.html"
         }
     ]

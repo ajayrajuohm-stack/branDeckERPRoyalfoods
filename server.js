@@ -3,46 +3,55 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 const tsxPath = path.join(__dirname, 'node_modules', '.bin', 'tsx');
+const logFile = path.join(__dirname, 'hostinger_debug.log');
 
-console.log('🚀 Starting Royal Foods ERP (Hostinger Resilient Mode)...');
-
-// Try to fix permissions before starting
-try {
-    console.log('Attemping to set permissions for tsx...');
-    spawn('chmod', ['+x', tsxPath], { stdio: 'inherit', shell: true });
-} catch (e) {
-    console.error('Failed to set permissions:', e);
+function log(msg) {
+    const timestamp = new Date().toISOString();
+    const entry = `[${timestamp}] ${msg}\n`;
+    console.log(msg);
+    fs.appendFileSync(logFile, entry);
 }
 
-// Use a function to start the process
+log('🚀 Starting Royal Foods ERP (Hostinger Debug Mode)...');
+log(`Working Dir: ${__dirname}`);
+log(`Node Version: ${process.version}`);
+
+// Try to fix permissions
+try {
+    if (fs.existsSync(tsxPath)) {
+        log('Setting permissions for tsx...');
+        spawn('chmod', ['+x', tsxPath], { stdio: 'inherit', shell: true });
+    }
+} catch (e) {
+    log(`Permission error (ignoring): ${e.message}`);
+}
+
 function startServer(command, args) {
-    console.log(`Executing: ${command} ${args.join(' ')}`);
+    log(`Executing: ${command} ${args.join(' ')}`);
     const child = spawn(command, args, {
-        stdio: 'inherit',
+        stdio: 'pipe',
         shell: true,
-        env: {
-            ...process.env,
-            NODE_ENV: 'production'
-        }
+        env: { ...process.env, NODE_ENV: 'production' }
     });
+
+    child.stdout.on('data', (data) => log(`[STDOUT] ${data}`));
+    child.stderr.on('data', (data) => log(`[STDERR] ${data}`));
 
     child.on('close', (code) => {
+        log(`🛑 Process exited with code ${code}`);
         if (code !== 0 && command !== 'npx') {
-            console.log('❌ Direct path failed, trying with npx...');
+            log('🔄 Retrying with npx...');
             startServer('npx', ['tsx', 'server/index.ts']);
-        } else {
-            console.log(`\n🛑 Process exited with code ${code}`);
-            process.exit(code);
         }
     });
 }
 
-// Start with direct path first
 if (fs.existsSync(tsxPath)) {
     startServer(tsxPath, ['server/index.ts']);
 } else {
-    console.log('tsx not found at direct path, trying npx...');
+    log('tsx not found at direct path, trying npx...');
     startServer('npx', ['tsx', 'server/index.ts']);
 }

@@ -982,7 +982,7 @@ function VendorSummaryCard({ vendor }: { vendor: any }) {
 }
 
 export default function Transactions() {
-  const { list: purchasesHook, create: createPurchase, remove: removePurchase } = usePurchases();
+  const { list: purchasesHook, create: createPurchase, remove: removePurchase, importExcel: importPurchasesExcel } = usePurchases();
   const { list: transfersHook, create: createTransfer, remove: removeTransfer } = useStockTransfers();
   const { list: paymentsHook, create: createPayment, remove: removePayment, update: updatePayment } = useSupplierPayments();
   const items = normalizeList(useItems().list.data);
@@ -1120,7 +1120,7 @@ export default function Transactions() {
   const handleImportExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      purchasesHook.importExcel.mutate(file, {
+      importPurchasesExcel.mutate(file, {
         onSuccess: () => {
           e.target.value = ""; // Reset
         }

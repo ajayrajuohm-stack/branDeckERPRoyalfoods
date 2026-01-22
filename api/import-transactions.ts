@@ -80,14 +80,15 @@ export async function importPurchasesFromExcel(filePath: string) {
 
             await db.transaction(async (tx) => {
                 // Create Purchase
-                const [purchase] = await tx.insert(purchases).values({
+                const [result] = await tx.insert(purchases).values({
                     purchaseDate: formatDate(first.DATE) || String(first.DATE),
                     supplierId,
                     warehouseId,
                     totalAmount: String(totalAmount),
                     payingAmount: String(first.PAID_AMOUNT || 0),
                     dueDate: formatDate(first.DUE_DATE),
-                }).returning();
+                });
+                const [purchase] = await tx.select().from(purchases).where(eq(purchases.id, result.insertId));
 
                 for (const r of groupRows) {
                     const itemId = itemMap[String(r.ITEM || "").toLowerCase()];
@@ -194,7 +195,7 @@ export async function importSalesFromExcel(filePath: string) {
 
                 const totalAmount = totalTaxable + totalGst;
 
-                const [sale] = await tx.insert(sales).values({
+                const [result] = await tx.insert(sales).values({
                     saleDate: formatDate(first.DATE) || String(first.DATE),
                     customerId,
                     warehouseId,
@@ -205,7 +206,8 @@ export async function importSalesFromExcel(filePath: string) {
                     sgstAmount: String(totalGst / 2),
                     igstAmount: "0",
                     ewayBillNumber: first.EWAY_BILL_NO || null,
-                }).returning();
+                });
+                const [sale] = await tx.select().from(sales).where(eq(sales.id, result.insertId));
 
                 for (const item of processedItems) {
                     await tx.insert(salesItems).values({

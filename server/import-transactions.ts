@@ -78,14 +78,15 @@ export async function importPurchasesFromExcel(filePath: string) {
 
             await db.transaction(async (tx) => {
                 // Create Purchase
-                const [purchase] = await tx.insert(purchases).values({
-                    purchaseDate: formatDate(first.DATE) || String(first.DATE),
+                const [result] = await tx.insert(purchases).values({
+                    purchaseDate: (formatDate(first.DATE) || String(first.DATE)) as any,
                     supplierId,
                     warehouseId,
                     totalAmount: String(totalAmount),
                     payingAmount: String(first.PAID_AMOUNT || 0),
-                    dueDate: formatDate(first.DUE_DATE),
-                }).returning();
+                    dueDate: formatDate(first.DUE_DATE) as any,
+                });
+                const purchase = { id: result.insertId };
 
                 for (const r of groupRows) {
                     const itemId = itemMap[String(r.ITEM || "").toLowerCase()];
@@ -192,18 +193,19 @@ export async function importSalesFromExcel(filePath: string) {
 
                 const totalAmount = totalTaxable + totalGst;
 
-                const [sale] = await tx.insert(sales).values({
-                    saleDate: formatDate(first.DATE) || String(first.DATE),
+                const [result] = await tx.insert(sales).values({
+                    saleDate: (formatDate(first.DATE) || String(first.DATE)) as any,
                     customerId,
                     warehouseId,
                     totalAmount: String(totalAmount),
                     receivedAmount: String(first.RECEIVED_AMOUNT || 0),
-                    dueDate: formatDate(first.DUE_DATE),
+                    dueDate: formatDate(first.DUE_DATE) as any,
                     cgstAmount: String(totalGst / 2), // Default to CGST/SGST split
                     sgstAmount: String(totalGst / 2),
                     igstAmount: "0",
                     ewayBillNumber: first.EWAY_BILL_NO || null,
-                }).returning();
+                });
+                const sale = { id: result.insertId };
 
                 for (const item of processedItems) {
                     await tx.insert(salesItems).values({

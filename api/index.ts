@@ -77,7 +77,7 @@ app.get('/api/health', (_req, res) => {
     res.status(200).json({
         status: 'ok',
         platform: 'Vercel Serverless',
-        database: 'Neon PostgreSQL',
+        database: 'TiDB Cloud (MySQL)',
         timestamp: new Date().toISOString()
     });
 });
@@ -85,12 +85,12 @@ app.get('/api/health', (_req, res) => {
 /* -------------------- VERCEL SERVERLESS EXPORT -------------------- */
 // ✅ Export Vercel-compatible serverless function handler
 
-console.log('✅ Royal Foods ERP configured for Vercel Serverless + Neon PostgreSQL');
-console.log('🗄️ Database: Neon (HTTP mode)');
+console.log('✅ Royal Foods ERP configured for Vercel Serverless + TiDB MySQL');
+console.log('🗄️ Database: TiDB Cloud');
 console.log('🚀 Platform: Vercel Serverless Functions');
 
 // Vercel serverless function handler
 export default function handler(req: any, res: any) {
-  // Let Express handle the request
-  return app(req, res);
+    // Let Express handle the request
+    return app(req, res);
 }

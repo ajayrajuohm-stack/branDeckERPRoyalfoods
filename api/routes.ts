@@ -491,8 +491,9 @@ export async function registerRoutes(_server: any, app: Express) {
         }
       }
 
-      const result = await db.insert(table).values(data).returning();
-      const inserted = Array.isArray(result) ? result[0] : result;
+      const [result] = await db.insert(table).values(data);
+      const insertId = result.insertId;
+      const [inserted] = await db.select().from(table).where(eq(table.id, insertId));
       res.status(201).json(inserted);
     } catch (err) {
       handleDbError(err, res);
@@ -513,8 +514,8 @@ export async function registerRoutes(_server: any, app: Express) {
         }
       }
 
-      const result = await db.update(table).set(data).where(eq(table.id, id)).returning();
-      const updated = Array.isArray(result) ? result[0] : result;
+      await db.update(table).set(data).where(eq(table.id, id));
+      const [updated] = await db.select().from(table).where(eq(table.id, id));
       if (!updated) {
         return res.status(404).json({ message: "Record not found" });
       }
@@ -584,7 +585,7 @@ export async function registerRoutes(_server: any, app: Express) {
 
       console.log(`[DEBUG] Updating Item ${id}:`, req.body);
 
-      const result = await db.update(items)
+      await db.update(items)
         .set({
           name,
           categoryId,
@@ -594,8 +595,8 @@ export async function registerRoutes(_server: any, app: Express) {
           gstRate: String(gstRate || 0),
           isActive
         })
-        .where(eq(items.id, id))
-        .returning();
+        .where(eq(items.id, id));
+      const result = await db.select().from(items).where(eq(items.id, id));
 
       if (!result.length) {
         return res.status(404).json({ message: "Item not found" });
@@ -763,7 +764,7 @@ export async function registerRoutes(_server: any, app: Express) {
         0
       );
 
-      const [purchase] = await db
+      const [result] = await db
         .insert(purchases)
         .values({
           purchaseDate,
@@ -772,8 +773,8 @@ export async function registerRoutes(_server: any, app: Express) {
           totalAmount: String(totalAmount),
           payingAmount: String(payingAmount || 0),
           dueDate: dueDate || null,
-        })
-        .returning();
+        });
+      const [purchase] = await db.select().from(purchases).where(eq(purchases.id, result.insertId));
 
       for (const li of lineItems) {
         await db.insert(purchaseItems).values({
@@ -1100,7 +1101,7 @@ export async function registerRoutes(_server: any, app: Express) {
       );
       const totalAmount = subTotal + Number(cgstAmount || 0) + Number(sgstAmount || 0) + Number(igstAmount || 0);
 
-      const [sale] = await db
+      const [result] = await db
         .insert(sales)
         .values({
           saleDate,
@@ -1117,8 +1118,8 @@ export async function registerRoutes(_server: any, app: Express) {
           cgstAmount: String(cgstAmount || 0),
           sgstAmount: String(sgstAmount || 0),
           igstAmount: String(igstAmount || 0),
-        })
-        .returning();
+        });
+      const [sale] = await db.select().from(sales).where(eq(sales.id, result.insertId));
 
       for (const li of lineItems) {
         await db.insert(salesItems).values({
@@ -1425,7 +1426,7 @@ export async function registerRoutes(_server: any, app: Express) {
         }
       }
 
-      const [payment] = await db
+      const [result] = await db
         .insert(supplierPayments)
         .values({
           paymentDate,
@@ -1436,8 +1437,8 @@ export async function registerRoutes(_server: any, app: Express) {
           paymentMethod,
           remarks,
           nextPaymentDate: req.body.nextPaymentDate || null,
-        })
-        .returning();
+        });
+      const [payment] = await db.select().from(supplierPayments).where(eq(supplierPayments.id, result.insertId));
 
       // Update linked purchase balance
       if (effectivePurchaseId) {
@@ -1480,7 +1481,7 @@ export async function registerRoutes(_server: any, app: Express) {
         }
       }
 
-      const [payment] = await db
+      await db
         .update(supplierPayments)
         .set({
           paymentDate,
@@ -1492,8 +1493,8 @@ export async function registerRoutes(_server: any, app: Express) {
           remarks,
           nextPaymentDate: req.body.nextPaymentDate || null,
         })
-        .where(eq(supplierPayments.id, paymentId))
-        .returning();
+        .where(eq(supplierPayments.id, paymentId));
+      const [payment] = await db.select().from(supplierPayments).where(eq(supplierPayments.id, paymentId));
 
       // Sync purchase balances
       if (oldPayment.purchaseId) {
@@ -1607,7 +1608,7 @@ export async function registerRoutes(_server: any, app: Express) {
         }
       }
 
-      const [payment] = await db
+      const [result] = await db
         .insert(customerPayments)
         .values({
           paymentDate,
@@ -1618,8 +1619,8 @@ export async function registerRoutes(_server: any, app: Express) {
           paymentMethod,
           remarks,
           nextReceiptDate: req.body.nextReceiptDate || null,
-        })
-        .returning();
+        });
+      const [payment] = await db.select().from(customerPayments).where(eq(customerPayments.id, result.insertId));
 
       // Update linked sale balance
       if (effectiveSaleId) {
@@ -1662,7 +1663,7 @@ export async function registerRoutes(_server: any, app: Express) {
         }
       }
 
-      const [payment] = await db
+      await db
         .update(customerPayments)
         .set({
           paymentDate,
@@ -1674,8 +1675,8 @@ export async function registerRoutes(_server: any, app: Express) {
           remarks,
           nextReceiptDate: req.body.nextReceiptDate || null,
         })
-        .where(eq(customerPayments.id, paymentId))
-        .returning();
+        .where(eq(customerPayments.id, paymentId));
+      const [payment] = await db.select().from(customerPayments).where(eq(customerPayments.id, paymentId));
 
       // Sync sale balances
       if (oldPayment.saleId) {
@@ -1782,7 +1783,7 @@ export async function registerRoutes(_server: any, app: Express) {
       }
 
       // 2. Insert Transfer Record
-      const [transfer] = await db.insert(stockTransfers).values({
+      const [result] = await db.insert(stockTransfers).values({
         transferDate,
         itemId,
         fromWarehouseId,
@@ -1790,7 +1791,8 @@ export async function registerRoutes(_server: any, app: Express) {
         quantity: String(quantity),
         uomId,
         remarks
-      }).returning();
+      });
+      const [transfer] = await db.select().from(stockTransfers).where(eq(stockTransfers.id, result.insertId));
 
       // 3. Deduct from Source
       await db.insert(stockLedger).values({
@@ -1928,9 +1930,10 @@ export async function registerRoutes(_server: any, app: Express) {
       }
 
       // 4. Update Record
-      const [updated] = await db.update(stockTransfers).set({
+      await db.update(stockTransfers).set({
         transferDate, itemId, fromWarehouseId, toWarehouseId: toWarehouseId || null, quantity: String(quantity), uomId, remarks
-      }).where(eq(stockTransfers.id, id)).returning();
+      }).where(eq(stockTransfers.id, id));
+      const [updated] = await db.select().from(stockTransfers).where(eq(stockTransfers.id, id));
 
       res.json(updated);
     } catch (err) {
@@ -2370,8 +2373,8 @@ export async function registerRoutes(_server: any, app: Express) {
       // Filter for purchases JOIN
       const purchaseConditions = [eq(suppliers.id, purchases.supplierId)];
       if (startDate && endDate) {
-        purchaseConditions.push(gte(purchases.purchaseDate, startDate));
-        purchaseConditions.push(lte(purchases.purchaseDate, endDate));
+        purchaseConditions.push(gte(purchases.purchaseDate, new Date(startDate)));
+        purchaseConditions.push(lte(purchases.purchaseDate, new Date(endDate)));
       }
       if (wId) {
         purchaseConditions.push(eq(purchases.warehouseId, wId));
@@ -2392,7 +2395,7 @@ export async function registerRoutes(_server: any, app: Express) {
       // Filter for payments WHERE
       let paymentWhere = undefined;
       if (startDate && endDate) {
-        paymentWhere = and(gte(supplierPayments.paymentDate, startDate), lte(supplierPayments.paymentDate, endDate));
+        paymentWhere = and(gte(supplierPayments.paymentDate, new Date(startDate)), lte(supplierPayments.paymentDate, new Date(endDate)));
       }
 
       // Get all supplier payments grouped by supplier
@@ -2452,7 +2455,7 @@ export async function registerRoutes(_server: any, app: Express) {
 
       // Calculate overdue payments
       const overdue = purchasesWithDue
-        .filter(p => p.dueDate && p.dueDate <= today)
+        .filter(p => p.dueDate && new Date(p.dueDate) <= new Date(today))
         .map(p => {
           const payment = paymentData.find(pm => pm.supplierId === p.supplierId);
           const totalPayments = Number(payment?.totalPayments) || 0;
@@ -2518,7 +2521,7 @@ export async function registerRoutes(_server: any, app: Express) {
 
       // Calculate upcoming payments (due within 7 days, not yet overdue)
       const upcoming = purchasesWithDue
-        .filter(p => p.dueDate && p.dueDate > todayStr && p.dueDate <= sevenDaysStr)
+        .filter(p => p.dueDate && new Date(p.dueDate) > new Date(todayStr) && new Date(p.dueDate) <= new Date(sevenDaysStr))
         .map(p => {
           const payment = paymentData.find(pm => pm.supplierId === p.supplierId);
           const totalPayments = Number(payment?.totalPayments) || 0;
@@ -2578,8 +2581,8 @@ export async function registerRoutes(_server: any, app: Express) {
       // Filter for sales JOIN
       const salesConditions = [eq(customers.id, sales.customerId)];
       if (startDate && endDate) {
-        salesConditions.push(gte(sales.saleDate, startDate));
-        salesConditions.push(lte(sales.saleDate, endDate));
+        salesConditions.push(gte(sales.saleDate, new Date(startDate)));
+        salesConditions.push(lte(sales.saleDate, new Date(endDate)));
       }
       if (wId) {
         salesConditions.push(eq(sales.warehouseId, wId));
@@ -2600,7 +2603,7 @@ export async function registerRoutes(_server: any, app: Express) {
       // Filter for payments WHERE
       let paymentWhere = undefined;
       if (startDate && endDate) {
-        paymentWhere = and(gte(customerPayments.paymentDate, startDate), lte(customerPayments.paymentDate, endDate));
+        paymentWhere = and(gte(customerPayments.paymentDate, new Date(startDate)), lte(customerPayments.paymentDate, new Date(endDate)));
       }
 
       // Get all customer payments grouped by customer
@@ -2651,7 +2654,7 @@ export async function registerRoutes(_server: any, app: Express) {
 
       // Calculate overdue sales
       const overdue = salesWithDue
-        .filter(s => s.dueDate && s.dueDate <= today)
+        .filter(s => s.dueDate && new Date(s.dueDate) <= new Date(today))
         .map(s => {
           // Calculate remaining for this specific sale
           const totalAmount = Number(s.totalAmount) || 0;
@@ -2702,7 +2705,7 @@ export async function registerRoutes(_server: any, app: Express) {
 
       // Calculate upcoming sales
       const upcoming = salesWithDue
-        .filter(s => s.dueDate && s.dueDate > todayStr && s.dueDate <= threeDaysStr)
+        .filter(s => s.dueDate && new Date(s.dueDate) > new Date(todayStr) && new Date(s.dueDate) <= new Date(threeDaysStr))
         .map(s => {
           const totalAmount = Number(s.totalAmount) || 0;
           const receivedAmount = Number(s.receivedAmount) || 0;
@@ -2749,11 +2752,10 @@ export async function registerRoutes(_server: any, app: Express) {
     try {
       const { name, outputItemId, outputQuantity, isActive, lines } = req.body;
 
-      const result = await db
+      const [result] = await db
         .insert(bomRecipes)
-        .values({ name, outputItemId, outputQuantity, isActive })
-        .returning();
-      const recipe = Array.isArray(result) ? result[0] : result;
+        .values({ name, outputItemId, outputQuantity, isActive });
+      const [recipe] = await db.select().from(bomRecipes).where(eq(bomRecipes.id, result.insertId));
 
       if (lines?.length) {
         await db.insert(bomLines).values(
@@ -2793,13 +2795,12 @@ export async function registerRoutes(_server: any, app: Express) {
         updateData.isActive = Boolean(isActive);
       }
 
-      const result = await db
+      await db
         .update(bomRecipes)
         .set(updateData)
-        .where(eq(bomRecipes.id, recipeId))
-        .returning();
+        .where(eq(bomRecipes.id, recipeId));
 
-      const updated = Array.isArray(result) ? result[0] : result;
+      const [updated] = await db.select().from(bomRecipes).where(eq(bomRecipes.id, recipeId));
       if (!updated) {
         return res.status(404).json({ message: "BOM recipe not found" });
       }
@@ -2880,7 +2881,7 @@ export async function registerRoutes(_server: any, app: Express) {
       */
 
       // 1. Create production run
-      const [run] = await db
+      const [result] = await db
         .insert(productionRuns)
         .values({
           productionDate,
@@ -2889,8 +2890,8 @@ export async function registerRoutes(_server: any, app: Express) {
           warehouseId,
           batchCount: String(batchCount || 0), // Save batch count
           remarks: req.body.remarks || null, // Save remarks
-        })
-        .returning();
+        });
+      const [run] = await db.select().from(productionRuns).where(eq(productionRuns.id, result.insertId));
 
       console.log("Production run created:", run.id);
 
@@ -3120,10 +3121,10 @@ export async function registerRoutes(_server: any, app: Express) {
         }
 
         // 3. Move the production run to trash instead of deleting
-        const updated = await tx.update(productionRuns)
+        await tx.update(productionRuns)
           .set({ isDeleted: true, deletedAt: new Date() })
-          .where(eq(productionRuns.id, runId))
-          .returning();
+          .where(eq(productionRuns.id, runId));
+        const updated = await tx.select().from(productionRuns).where(eq(productionRuns.id, runId));
 
         if (updated.length === 0) {
           throw new Error("Failed to move production run to trash");
@@ -3267,13 +3268,14 @@ export async function registerRoutes(_server: any, app: Express) {
       let [settings] = await db.select().from(adminSettings).limit(1);
       if (!settings) {
         // Create default settings if they don't exist
-        [settings] = await db.insert(adminSettings).values({
+        const [result] = await db.insert(adminSettings).values({
           adminName: "Admin",
           companyName: "My Company",
           phone: "",
           email: "",
           address: ""
-        }).returning();
+        });
+        [settings] = await db.select().from(adminSettings).where(eq(adminSettings.id, result.insertId));
       }
       res.json(settings);
     } catch (err) {
@@ -3287,12 +3289,13 @@ export async function registerRoutes(_server: any, app: Express) {
       let [settings] = await db.select().from(adminSettings).limit(1);
 
       if (!settings) {
-        [settings] = await db.insert(adminSettings).values(payload).returning();
+        const [result] = await db.insert(adminSettings).values(payload);
+        [settings] = await db.select().from(adminSettings).where(eq(adminSettings.id, result.insertId));
       } else {
-        [settings] = await db.update(adminSettings)
+        await db.update(adminSettings)
           .set({ ...payload, updatedAt: new Date() })
-          .where(eq(adminSettings.id, settings.id))
-          .returning();
+          .where(eq(adminSettings.id, settings.id));
+        [settings] = await db.select().from(adminSettings).where(eq(adminSettings.id, settings.id));
       }
       res.json(settings);
     } catch (err) {

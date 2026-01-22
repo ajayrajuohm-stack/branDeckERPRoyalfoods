@@ -1,49 +1,41 @@
 // @ts-nocheck
 import * as schema from "../shared/schema";
-import { neon, neonConfig } from '@neondatabase/serverless';
-import { drizzle as drizzleNeon } from 'drizzle-orm/neon-http';
-import { drizzle as drizzlePg } from 'drizzle-orm/node-postgres';
-import pg from 'pg';
-
-const { Pool } = pg;
+import { drizzle } from 'drizzle-orm/mysql2';
+import mysql from 'mysql2/promise';
 
 if (!process.env.DATABASE_URL) {
   throw new Error("DATABASE_URL is not set");
 }
 
-console.log(`🔌 Database Configuration:`);
+console.log(`🔌 Database Configuration (Vercel):`);
 console.log(`   URL: ${process.env.DATABASE_URL.split('@')[1] ? '***@' + process.env.DATABASE_URL.split('@')[1] : 'Hidden'}`);
 
-let db: any;
-let sql: any;
-
-// ✅ UNIVERSAL DB CONNECTION
-if (process.env.VERCEL) {
-  // ☁️ VERCEL MODE: Use Neon HTTP Driver (Serverless optimized)
-  console.log("   ➤ Mode: Vercel Serverless (Neon HTTP)");
-  neonConfig.fetchConnectionCache = true;
-  sql = neon(process.env.DATABASE_URL);
-  db = drizzleNeon(sql, { schema });
-} else {
-  // 💻 LOCAL MODE: Use Standard Node Postgres (Persistent connection)
-  console.log("   ➤ Mode: Local Development (Standard Postgres)");
-
-  // Create a connection pool for local dev
-  const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    max: 10, // Max clients in pool
-  });
-
-  // Test connection on startup
-  pool.connect().then(client => {
-    console.log("   ✅ Connected to Local PostgreSQL successfully");
-    client.release();
-  }).catch(err => {
-    console.error("   ❌ Failed to connect to Local PostgreSQL:", err.message);
-  });
-
-  db = drizzlePg(pool, { schema });
-  sql = pool; // Alias pool as sql for compatibility if needed, though use cases might differ
+let pool;
+try {
+  // Use the connection string directly if it contains SSL parameters
+  if (process.env.DATABASE_URL!.includes('ssl=')) {
+    pool = mysql.createPool(process.env.DATABASE_URL!);
+    console.log(`✅ MySQL Pool created using direct URI string (SSL enabled)`);
+  } else {
+    const url = new URL(process.env.DATABASE_URL!);
+    pool = mysql.createPool({
+      host: url.hostname || '127.0.0.1',
+      user: url.username,
+      password: decodeURIComponent(url.password),
+      database: url.pathname.slice(1),
+      port: parseInt(url.port) || 3306,
+      waitForConnections: true,
+      connectionLimit: 5, // Lower limit for serverless
+      queueLimit: 0
+    });
+    console.log(`✅ MySQL Pool created for database: ${url.pathname.slice(1)}`);
+  }
+} catch (e) {
+  console.error("❌ Failed to parse DATABASE_URL. Falling back to direct URI string.");
+  pool = mysql.createPool(process.env.DATABASE_URL!);
 }
 
-export { db, sql };
+const db = drizzle(pool, { schema, mode: 'default' });
+
+export { db, pool as sql };
+
