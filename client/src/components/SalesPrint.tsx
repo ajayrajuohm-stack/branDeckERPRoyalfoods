@@ -22,7 +22,7 @@ export function SalesPrint({ sale, companyInfo, customerInfo, onClose }: SalesPr
     const componentRef = useRef<HTMLDivElement>(null);
 
     const handlePrint = useReactToPrint({
-        content: () => componentRef.current,
+        contentRef: componentRef,
         onAfterPrint: onClose,
         documentTitle: `Invoice-${sale.id}`,
     });
