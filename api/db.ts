@@ -12,7 +12,7 @@ if (process.env.DATABASE_URL) {
     const connectionConfig = {
       host: dbUrl.hostname,
       user: dbUrl.username,
-      password: dbUrl.password,
+      password: decodeURIComponent(dbUrl.password),
       database: dbUrl.pathname.slice(1),
       port: parseInt(dbUrl.port) || 4000,
       ssl: { rejectUnauthorized: true },

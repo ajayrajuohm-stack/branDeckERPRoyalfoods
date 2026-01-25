@@ -1622,6 +1622,7 @@ export async function registerRoutes(_server: any, app: Express) {
         .where(warehouseId ? eq(stockLedger.warehouseId, warehouseId) : undefined);
 
       // 2. Get Average Purchase Rates (Weighted Average)
+      // This ensures that adding a purchase of ₹100 adds exactly ₹100 to the total value.
       const purchaseRates = await db
         .select({
           itemId: purchaseItems.itemId,
@@ -1631,33 +1632,16 @@ export async function registerRoutes(_server: any, app: Express) {
         .from(purchaseItems)
         .groupBy(purchaseItems.itemId);
 
-      // 3. Get Last Sales Rates (Fallback for manufactured items/FGs)
-      // We take the MAX(rate) as a proxy for "latest/standard selling price" to value FG stock if no purchase history exists
-      const salesRates = await db
-        .select({
-          itemId: salesItems.itemId,
-          avgRate: sql`AVG(CAST(${salesItems.rate} AS DECIMAL))`
-        })
-        .from(salesItems)
-        .groupBy(salesItems.itemId);
+      // 3. Get Last Sales Rates (Fallback REMOVED)
 
       const rateMap = new Map<number, number>();
 
-      // Populate map with Purchase Rates first
+      // Populate map with Weighted Average Rate
       purchaseRates.forEach(p => {
         const qty = Number(p.totalQty) || 0;
         const amt = Number(p.totalAmount) || 0;
         if (qty > 0) {
           rateMap.set(p.itemId, amt / qty);
-        }
-      });
-
-      // Fill gaps with Sales Rates
-      salesRates.forEach(s => {
-        if (!rateMap.has(s.itemId)) {
-          // Use 70% of Sales Rate as conservative "Cost" estimate for FGs 
-          // (assuming ~30% margin)
-          rateMap.set(s.itemId, (Number(s.avgRate) || 0) * 0.7);
         }
       });
 
@@ -3181,13 +3165,28 @@ export async function registerRoutes(_server: any, app: Express) {
 
       await db.transaction(async (tx) => {
         if (type === "PURCHASE") {
-          await tx.delete(stockLedger).where(eq(stockLedger.referenceId, id)).where(sql`${stockLedger.referenceType} LIKE 'PURCHASE%'`);
+          await tx.delete(stockLedger).where(
+            and(
+              eq(stockLedger.referenceId, id),
+              sql`${stockLedger.referenceType} LIKE 'PURCHASE%'`
+            )
+          );
           await tx.delete(purchases).where(eq(purchases.id, id));
         } else if (type === "SALE") {
-          await tx.delete(stockLedger).where(eq(stockLedger.referenceId, id)).where(sql`${stockLedger.referenceType} LIKE 'SALE%'`);
+          await tx.delete(stockLedger).where(
+            and(
+              eq(stockLedger.referenceId, id),
+              sql`${stockLedger.referenceType} LIKE 'SALE%'`
+            )
+          );
           await tx.delete(sales).where(eq(sales.id, id));
         } else if (type === "PRODUCTION") {
-          await tx.delete(stockLedger).where(eq(stockLedger.referenceId, id)).where(sql`${stockLedger.referenceType} LIKE 'PRODUCTION%'`);
+          await tx.delete(stockLedger).where(
+            and(
+              eq(stockLedger.referenceId, id),
+              sql`${stockLedger.referenceType} LIKE 'PRODUCTION%'`
+            )
+          );
           await tx.delete(productionRuns).where(eq(productionRuns.id, id));
         }
       });

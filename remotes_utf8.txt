@@ -1,2 +1,0 @@
-﻿origin	https://github.com/omkaramajay/Brandeck-ERP1.git (fetch)
-origin	https://github.com/omkaramajay/Brandeck-ERP1.git (push)

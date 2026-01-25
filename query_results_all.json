@@ -1,0 +1,3 @@
+[
+  "find-queries.ts:10: if (line.includes(\"db.query\") || line.includes(\".query.\")) {"
+]

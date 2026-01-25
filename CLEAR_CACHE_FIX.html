@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Clear App Cache</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 { color: #333; }
+        button {
+            background: #4CAF50;
+            color: white;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px;
+        }
+        button:hover { background: #45a049; }
+        .warning {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .success {
+            background: #d4edda;
+            border: 1px solid #28a745;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+            display: none;
+        }
+        .code {
+            background: #f4f4f4;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧹 Clear React Query Cache</h1>
+        
+        <div class="warning">
+            <strong>⚠️ Problem:</strong> Your app has <code>staleTime: Infinity</code> which means it caches data forever and never refetches from the server.
+        </div>
+
+        <h2>Quick Fix - Clear Cache Now:</h2>
+        
+        <button onclick="clearCache()">🗑️ Clear All Cache</button>
+        <button onclick="hardRefresh()">🔄 Hard Refresh</button>
+        <button onclick="clearAndReload()">✅ Clear + Reload</button>
+        
+        <div id="success" class="success">
+            <strong>✅ Cache Cleared!</strong>
+            <p>Now go to <a href="http://localhost:5000" target="_blank">http://localhost:5000</a></p>
+        </div>
+
+        <h2>Manual Steps:</h2>
+        <ol>
+            <li>Open your app at <strong>http://localhost:5000</strong></li>
+            <li>Press <strong>F12</strong> to open DevTools</li>
+            <li>Go to <strong>Console</strong> tab</li>
+            <li>Paste this code and press Enter:</li>
+        </ol>
+        
+        <div class="code">
+localStorage.clear();<br>
+sessionStorage.clear();<br>
+location.reload(true);
+        </div>
+
+        <h2>What This Does:</h2>
+        <ul>
+            <li>Clears React Query cache</li>
+            <li>Clears localStorage</li>
+            <li>Clears sessionStorage</li>
+            <li>Forces a fresh reload from server</li>
+        </ul>
+
+        <h2>Long-term Fix (Optional):</h2>
+        <p>To prevent this in future, we can change <code>staleTime: Infinity</code> to a reasonable value like 5 minutes:</p>
+        <div class="code">
+staleTime: 1000 * 60 * 5, // 5 minutes
+        </div>
+    </div>
+
+    <script>
+        function clearCache() {
+            try {
+                localStorage.clear();
+                sessionStorage.clear();
+                document.getElementById('success').style.display = 'block';
+                console.log('✅ Cache cleared!');
+            } catch (e) {
+                alert('Error clearing cache: ' + e.message);
+            }
+        }
+
+        function hardRefresh() {
+            location.reload(true);
+        }
+
+        function clearAndReload() {
+            clearCache();
+            setTimeout(() => {
+                window.open('http://localhost:5000', '_blank');
+            }, 1000);
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,4 @@
+[
+  "api/routes.ts:1594: const warehouseId = req.query.warehouseId ? parseInt(req.query.warehouseId as string) : undefined;",
+  "server/routes.ts:1600: const warehouseId = req.query.warehouseId ? parseInt(req.query.warehouseId as string) : undefined;"
+]

@@ -1,0 +1,97 @@
+{
+  "recipes": [
+    {
+      "id": 1,
+      "name": "Biscuits",
+      "outputItemId": 5,
+      "outputQuantity": "1.00",
+      "isActive": true,
+      "createdAt": "2026-01-22T08:15:34.000Z"
+    },
+    {
+      "id": 2,
+      "name": "Biscuits",
+      "outputItemId": 5,
+      "outputQuantity": "1.00",
+      "isActive": true,
+      "createdAt": "2026-01-22T08:15:35.000Z"
+    },
+    {
+      "id": 30001,
+      "name": "1",
+      "outputItemId": 5,
+      "outputQuantity": "1.00",
+      "isActive": true,
+      "createdAt": "2026-01-22T09:42:53.000Z"
+    }
+  ],
+  "lines": [
+    {
+      "id": 1,
+      "bomRecipeId": 1,
+      "itemId": 2,
+      "quantity": "12.00"
+    },
+    {
+      "id": 2,
+      "bomRecipeId": 1,
+      "itemId": 6,
+      "quantity": "12.00"
+    },
+    {
+      "id": 3,
+      "bomRecipeId": 1,
+      "itemId": 7,
+      "quantity": "12.00"
+    },
+    {
+      "id": 4,
+      "bomRecipeId": 1,
+      "itemId": 4,
+      "quantity": "12.00"
+    },
+    {
+      "id": 5,
+      "bomRecipeId": 1,
+      "itemId": 1,
+      "quantity": "12.00"
+    },
+    {
+      "id": 6,
+      "bomRecipeId": 2,
+      "itemId": 2,
+      "quantity": "12.00"
+    },
+    {
+      "id": 7,
+      "bomRecipeId": 2,
+      "itemId": 6,
+      "quantity": "12.00"
+    },
+    {
+      "id": 8,
+      "bomRecipeId": 2,
+      "itemId": 7,
+      "quantity": "12.00"
+    },
+    {
+      "id": 9,
+      "bomRecipeId": 2,
+      "itemId": 4,
+      "quantity": "12.00"
+    },
+    {
+      "id": 10,
+      "bomRecipeId": 2,
+      "itemId": 1,
+      "quantity": "12.00"
+    },
+    {
+      "id": 30001,
+      "bomRecipeId": 30001,
+      "itemId": 2,
+      "quantity": "1.00"
+    }
+  ],
+  "count": 3
+}

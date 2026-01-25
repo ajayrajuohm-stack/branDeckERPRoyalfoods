@@ -1,1 +1,79 @@
-{"data":[{"id":9,"name":"Biscuit","categoryId":2,"defaultUomId":4,"reorderLevel":"0","isActive":true,"createdAt":"2026-01-04T14:45:11.249Z","categoryType":"FINISHED","categoryName":"Finished Good"},{"id":11,"name":"Osmaina Biscuit 1","categoryId":2,"defaultUomId":4,"reorderLevel":"0","isActive":true,"createdAt":"2026-01-07T19:33:05.463Z","categoryType":"FINISHED","categoryName":"Finished Good"},{"id":6,"name":"Salt","categoryId":1,"defaultUomId":2,"reorderLevel":"0","isActive":true,"createdAt":"2026-01-04T14:37:04.546Z","categoryType":"RAW","categoryName":"Raw Material"},{"id":3,"name":"Vanaspathi(Dalda)","categoryId":1,"defaultUomId":1,"reorderLevel":"0","isActive":true,"createdAt":"2026-01-04T14:36:26.982Z","categoryType":"RAW","categoryName":"Raw Material"},{"id":2,"name":"Maida","categoryId":1,"defaultUomId":1,"reorderLevel":"0","isActive":true,"createdAt":"2026-01-04T14:35:57.131Z","categoryType":"RAW","categoryName":"Raw Material"},{"id":4,"name":"Sugar","categoryId":1,"defaultUomId":1,"reorderLevel":"0","isActive":true,"createdAt":"2026-01-04T14:36:41.790Z","categoryType":"RAW","categoryName":"Raw Material"},{"id":5,"name":"Milk powder","categoryId":1,"defaultUomId":1,"reorderLevel":"0","isActive":true,"createdAt":"2026-01-04T14:36:52.732Z","categoryType":"RAW","categoryName":"Raw Material"},{"id":8,"name":"Plastic","categoryId":1,"defaultUomId":1,"reorderLevel":"0","isActive":true,"createdAt":"2026-01-04T14:38:08.416Z","categoryType":"RAW","categoryName":"Raw Material"},{"id":7,"name":"AM ","categoryId":1,"defaultUomId":2,"reorderLevel":"0","isActive":true,"createdAt":"2026-01-04T14:37:54.909Z","categoryType":"RAW","categoryName":"Raw Material"}]}
+[
+  {
+    "id": 1,
+    "name": "Dalda",
+    "categoryId": 1,
+    "defaultUomId": 1,
+    "reorderLevel": "0.00",
+    "hsnCode": "",
+    "gstRate": "0.00",
+    "isActive": true,
+    "createdAt": "2026-01-22T08:12:24.000Z"
+  },
+  {
+    "id": 2,
+    "name": "Sugar",
+    "categoryId": 1,
+    "defaultUomId": 1,
+    "reorderLevel": "0.00",
+    "hsnCode": "",
+    "gstRate": "0.00",
+    "isActive": true,
+    "createdAt": "2026-01-22T08:12:35.000Z"
+  },
+  {
+    "id": 3,
+    "name": "Milk Powder",
+    "categoryId": 1,
+    "defaultUomId": 1,
+    "reorderLevel": "0.00",
+    "hsnCode": "",
+    "gstRate": "0.00",
+    "isActive": true,
+    "createdAt": "2026-01-22T08:12:56.000Z"
+  },
+  {
+    "id": 4,
+    "name": "RM",
+    "categoryId": 1,
+    "defaultUomId": 1,
+    "reorderLevel": "0.00",
+    "hsnCode": "",
+    "gstRate": "0.00",
+    "isActive": true,
+    "createdAt": "2026-01-22T08:13:06.000Z"
+  },
+  {
+    "id": 5,
+    "name": "Biscuit",
+    "categoryId": 2,
+    "defaultUomId": 2,
+    "reorderLevel": "0.00",
+    "hsnCode": "",
+    "gstRate": "0.00",
+    "isActive": true,
+    "createdAt": "2026-01-22T08:13:20.000Z"
+  },
+  {
+    "id": 6,
+    "name": "Maida",
+    "categoryId": 1,
+    "defaultUomId": 1,
+    "reorderLevel": "0.00",
+    "hsnCode": "",
+    "gstRate": "0.00",
+    "isActive": true,
+    "createdAt": "2026-01-22T08:13:38.000Z"
+  },
+  {
+    "id": 7,
+    "name": "Plastic",
+    "categoryId": 1,
+    "defaultUomId": 1,
+    "reorderLevel": "0.00",
+    "hsnCode": "",
+    "gstRate": "0.00",
+    "isActive": true,
+    "createdAt": "2026-01-22T08:13:45.000Z"
+  }
+]
