@@ -260,7 +260,7 @@ export default function Reports() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricCard
           title="Avg Sales Monthly"
           value={`₹ ${avgSales.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
@@ -275,7 +275,13 @@ export default function Reports() {
           trend="Attention"
           color="emerald"
         />
-
+        <MetricCard
+          title="Warehouse Value"
+          value={`₹ ${totalStockValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
+          icon={Package}
+          trend="Asset Value"
+          color="amber"
+        />
         <MetricCard
           title="Pending Payables"
           value={`₹ ${totalPayables.toLocaleString()}`}
