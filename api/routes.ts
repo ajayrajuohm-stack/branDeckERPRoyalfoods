@@ -1588,8 +1588,7 @@ export async function registerRoutes(_server: any, app: Express) {
   /* =======================
      STOCK REPORT
   ======================= */
-  // Stock Report
-  // Stock Report (FIFO Valuation)
+  // Stock Report (Weighted Average Valuation)
   app.get("/api/reports/stock", async (req, res) => {
     try {
       const warehouseId = req.query.warehouseId ? parseInt(req.query.warehouseId as string) : undefined;
@@ -1622,62 +1621,32 @@ export async function registerRoutes(_server: any, app: Express) {
         )
         .where(warehouseId ? eq(stockLedger.warehouseId, warehouseId) : undefined);
 
-      // 2. FIFO Valuation Logic
-      // Fetch all purchases ordered by date descending (Newest first)
-      const allPurchases = await db
+      // 2. Get Average Purchase Rates (Weighted Average)
+      // This ensures that adding a purchase of ₹100 adds exactly ₹100 to the total value.
+      const purchaseRates = await db
         .select({
           itemId: purchaseItems.itemId,
-          quantity: purchaseItems.quantity,
-          amount: purchaseItems.amount,
+          totalAmount: sql`SUM(CAST(${purchaseItems.amount} AS DECIMAL))`,
+          totalQty: sql`SUM(CAST(${purchaseItems.quantity} AS DECIMAL))`
         })
         .from(purchaseItems)
-        .innerJoin(purchases, eq(purchaseItems.purchaseId, purchases.id)) // Join to get date if needed, or rely on ID order
-        .where(eq(purchases.isDeleted, false))
-        .orderBy(desc(purchases.purchaseDate), desc(purchases.id));
+        .groupBy(purchaseItems.itemId);
 
-      // Group purchases by Item
-      const purchasesByItem = new Map<number, { qty: number, amt: number, rate: number }[]>();
+      const rateMap = new Map<number, number>();
 
-      for (const p of allPurchases) {
-        if (!purchasesByItem.has(p.itemId)) purchasesByItem.set(p.itemId, []);
-        const qty = Number(p.quantity);
-        const amt = Number(p.amount);
+      // Populate map with Weighted Average Rate
+      purchaseRates.forEach(p => {
+        const qty = Number(p.totalQty) || 0;
+        const amt = Number(p.totalAmount) || 0;
         if (qty > 0) {
-          purchasesByItem.get(p.itemId)?.push({
-            qty,
-            amt,
-            rate: amt / qty // Calculate effective rate for this specific batch
-          });
+          rateMap.set(p.itemId, amt / qty);
         }
-      }
+      });
 
       const formatted = stockData.map(s => {
-        let remainingStockToValue = Math.max(0, Number(s.quantity));
-        const totalStock = remainingStockToValue;
-        let totalValue = 0;
-
-        // Get purchase history for this item
-        const itemPurchases = purchasesByItem.get(s.itemId) || [];
-
-        // FIFO: Iterate from newest purchases backwards
-        for (const batch of itemPurchases) {
-          if (remainingStockToValue <= 0) break;
-
-          const qtyToTake = Math.min(remainingStockToValue, batch.qty);
-          totalValue += qtyToTake * batch.rate;
-
-          remainingStockToValue -= qtyToTake;
-        }
-
-        // If stock remains but no purchase history (e.g. Opening Balance or Data Gap), 
-        // fall back to the rate of the oldest available purchase or 0
-        if (remainingStockToValue > 0 && itemPurchases.length > 0) {
-          const lastRate = itemPurchases[itemPurchases.length - 1].rate;
-          totalValue += remainingStockToValue * lastRate;
-        }
-
-        // Calculate implicit average rate for UI display
-        const avgRate = totalStock > 0 ? totalValue / totalStock : 0;
+        const qty = Math.abs(Number(s.quantity)) < 0.0001 ? 0 : Number(s.quantity);
+        const avgRate = rateMap.get(s.itemId) || 0;
+        const stockValue = qty * avgRate;
 
         return {
           itemId: s.itemId,
@@ -1685,11 +1654,11 @@ export async function registerRoutes(_server: any, app: Express) {
           categoryName: s.categoryName || '-',
           warehouseId: s.warehouseId,
           warehouseName: s.warehouseName || 'Unknown',
-          quantity: totalStock,
+          quantity: qty,
           unitName: s.unitName || '-',
           reorderLevel: Number(s.reorderLevel) || 0,
           avgRate: avgRate,
-          value: totalValue
+          value: stockValue
         };
       });
 
